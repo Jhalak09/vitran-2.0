@@ -1,0 +1,23 @@
+toaster container 
+<Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#1e40af',
+              color: '#fff',
+              fontWeight: '500',
+            },
+            success: {
+              style: {
+                background: '#16a34a',
+              },
+            },
+            error: {
+              style: {
+                background: '#dc2626',
+              },
+            },
+          }}
+        />
+

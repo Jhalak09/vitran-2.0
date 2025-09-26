@@ -1,0 +1,175 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  WORKER
+  CUSTOMER
+}
+
+enum CustomerClassification {
+  B2B
+  B2C
+}
+
+// Existing tables (unchanged)
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String?
+  role      UserRole @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  customerId     Int                    @id @default(autoincrement())
+  firstName      String
+  lastName       String?
+  address1       String
+  address2       String?
+  phoneNumber    String?                 @unique
+  role           UserRole               @default(CUSTOMER)
+  city           String?
+  pincode        String?
+  classification CustomerClassification
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  // Relations
+  workerCustomers  WorkerCustomer[]
+  customerProducts CustomerProduct[]
+  customerInventories CustomerInventory[]
+  paymentReceived  PaymentReceived[]
+}
+
+model Worker {
+  workerId    Int      @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  role        UserRole @default(WORKER)
+  isActive    Boolean  @default(true)
+  phoneNumber String   @unique
+  password    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  workerCustomers WorkerCustomer[]
+  workerInventories WorkerInventory[]
+}
+
+enum store{
+  SANCHI
+  SABORO
+}
+
+// New tables from your image
+model Product {
+  productId           Int      @id @default(autoincrement())
+  productName         String
+  currentProductPrice Decimal  @db.Decimal(10,2)
+  lastProductPrice    Decimal? @db.Decimal(10,2)
+  imageUrl            String?
+  description         String?
+  storeId             store
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  customerProducts CustomerProduct[]
+  inventories      Inventory[]
+}
+
+model WorkerCustomer {
+  id         Int      @id @default(autoincrement())
+  workerId   Int
+  customerId Int?     // ✅ MADE OPTIONAL - can be null initially
+  fromDate   DateTime
+  thruDate   DateTime?   // optional for ongoing relation
+
+  // Relations
+  worker   Worker    @relation(fields: [workerId], references: [workerId], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [customerId], onDelete: Cascade) // ✅ MADE OPTIONAL
+
+  // ✅ UPDATED: Allow null customerId in unique constraint
+  @@unique([workerId, customerId])
+}
+
+model CustomerProduct {
+  id                 Int      @id @default(autoincrement())
+  customerId         Int
+  productId          Int?     // ✅ MADE OPTIONAL - can be null initially
+  fromDate           DateTime
+  thruDate           DateTime?   // optional for ongoing relation
+  quantityAssociated Int      @default(0)
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [productId], onDelete: Cascade) // ✅ MADE OPTIONAL
+
+  // ✅ UPDATED: Allow null productId in unique constraint  
+  @@unique([customerId, productId])
+}
+
+model Inventory {
+  inventoryId          Int      @id @default(autoincrement())
+  productId            Int
+  totalOrderedQuantity Int      // ✅ Calculated from CustomerProduct aggregation
+  receivedQuantity     Int?     // ✅ Optional - Admin input when products received
+  remainingQuantity    Int?     // ✅ Optional - End of day remaining (admin input)
+  entryByUserLoginId   String?  // ✅ Optional - Set when admin makes entries
+  lastUpdated          DateTime @default(now()) // ✅ Track when demand was last calculated
+  date                 DateTime @default(now())  // ✅ Daily record date (not nullable)
+
+  // Relations
+  product Product @relation(fields: [productId], references: [productId], onDelete: Cascade)
+  
+  @@unique([productId, date]) // ✅ One inventory record per product per day
+}
+
+model WorkerInventory {
+  id                       Int      @id @default(autoincrement())
+  workerId                 Int
+  inventoryId              Int
+  totalPickedQuantity Int?
+  remainingQuantity        Int?     // End of day input
+  date                     DateTime @default(now())
+
+  // Relations
+  worker Worker @relation(fields: [workerId], references: [workerId], onDelete: Cascade)
+  // Note: inventoryId references Inventory table but no direct relation defined to avoid circular dependency
+}
+
+model CustomerInventory {
+  id                Int      @id @default(autoincrement())
+  customerId        Int
+  inventoryId       Int
+  date              DateTime
+  deliveredQuantity Int
+  b2b_bill          Boolean  @default(false)
+  b2c_bill          Boolean  @default(false)
+  userLogin         String
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+  // Note: inventoryId references Inventory table but no direct relation defined to avoid circular dependency
+}
+
+model PaymentReceived {
+  id           Int      @id @default(autoincrement())
+  customerId   Int
+  bill         Decimal  @db.Decimal(10,2)
+  isCollected  Boolean  @default(false)
+  date         DateTime @default(now())
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+}

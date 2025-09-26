@@ -1,0 +1,9 @@
+vitran-2.0/
+ ├── prisma/
+ │    └── schema.prisma
+ ├── backend/
+ │    └── package.json
+ ├── frontend/
+ │    └── package.json
+ ├── package.json
+ └── tsconfig.json
