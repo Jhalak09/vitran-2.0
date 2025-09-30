@@ -43,15 +43,23 @@ export class ProductController {
     }
   }
 
-  @Get('by-store')
-  async findByStore(@Query('store') storeId: string) {
-    try {
-      const products = await this.productService.findByStore(storeId);
-      return { success: true, message: `Products from ${storeId} store retrieved successfully`, data: products };
-    } catch (error) {
-      return { success: false, message: 'Failed to fetch products by store', data: [] };
-    }
+  @Get('products-with-latest-inventory')
+async getProductsWithLatestInventory() {
+  try {
+    const data = await this.productService.getProductsWithLatestInventory();
+    return {
+      success: true,
+      message: 'Products with latest inventory retrieved successfully',
+      data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      data: []
+    };
   }
+}
 
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
@@ -82,4 +90,7 @@ export class ProductController {
       return { success: false, message: error.message || 'Failed to delete product', data: null };
     }
   }
+
+
+
 }

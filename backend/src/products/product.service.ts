@@ -7,8 +7,9 @@ import * as path from 'path';
 
 @Injectable()
 export class ProductService {
+  private readonly logger: Logger = new Logger(ProductService.name);
   constructor(private prisma: PrismaService,
-                private readonly logger: Logger = new Logger(ProductService.name)
+                
   ) {}
 
   async create(createProductDto: CreateProductDto): Promise<Product> {
@@ -44,13 +45,6 @@ export class ProductService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
     return product;
-  }
-
-  async findByStore(storeId: string): Promise<Product[]> {
-    return this.prisma.product.findMany({
-      where: { storeId: storeId as any },
-      orderBy: { createdAt: 'desc' },
-    });
   }
 
   async update(productId: number, updateProductDto: UpdateProductDto): Promise<Product> {
@@ -128,19 +122,12 @@ export class ProductService {
         imageUrl: true,
         description: true,
         storeId: true,
-        createdAt: true,
-        updatedAt: true,
         // ✅ Include latest inventory record
         inventories: {
           orderBy: { date: 'desc' },
           take: 1,
           select: {
             inventoryId: true,
-            totalOrderedQuantity: true,
-            receivedQuantity: true,
-            remainingQuantity: true,
-            entryByUserLoginId: true,
-            lastUpdated: true,
             date: true
           }
         }
@@ -159,16 +146,9 @@ export class ProductService {
       imageUrl: product.imageUrl,
       description: product.description,
       storeId: product.storeId,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
       // ✅ Flatten latest inventory data
       inventory: product.inventories.length > 0 ? {
         inventoryId: product.inventories[0].inventoryId,
-        totalOrderedQuantity: product.inventories[0].totalOrderedQuantity,
-        receivedQuantity: product.inventories[0].receivedQuantity,
-        remainingQuantity: product.inventories[0].remainingQuantity,
-        entryByUserLoginId: product.inventories[0].entryByUserLoginId,
-        lastUpdated: product.inventories[0].lastUpdated,
         date: product.inventories[0].date
       } : null
     }));

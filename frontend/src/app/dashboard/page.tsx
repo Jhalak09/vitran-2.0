@@ -41,7 +41,7 @@ export default function Dashboard() {
       title: 'Daily Entry',
       subtitle: 'Verification',
       icon: '✅',
-      route: '/data-entry',
+      route: '/data-verification',
       color: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)'
     },
     {

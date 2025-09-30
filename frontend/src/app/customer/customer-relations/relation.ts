@@ -45,6 +45,7 @@ export interface WorkerCustomerRelation {
   thruDate?: string;
   worker: Worker;
   customer: Customer;
+  sequenceNumber?: number;
 }
 
 export interface CustomerProductRelation {
@@ -134,10 +135,19 @@ private async fetchWithAuth<T>(url: string, options: RequestInit = {}): Promise<
     return this.fetchWithAuth<RelationResponse>('/relations/worker-customers');
   }
 
-  async assignCustomerToWorker(workerId: number, customerId: number, fromDate?: string): Promise<RelationResponse> {
-    return this.fetchWithAuth<RelationResponse>('/relations/assign-customer-to-worker', {
+  async assignCustomerToWorker({
+    workerId,
+    customerId,
+    sequenceNumber
+  }: {
+    workerId: number;
+    customerId: number;
+    sequenceNumber: number;
+  }): Promise<WorkerCustomerRelation> {
+    // Send data in body as per backend requirements
+    return this.fetchWithAuth('/relations/assign-customer-to-worker', {
       method: 'POST',
-      body: JSON.stringify({ workerId, customerId, fromDate }),
+      body: JSON.stringify({ workerId, customerId, sequenceNumber })
     });
   }
 
@@ -156,12 +166,11 @@ async assignProductToCustomer(
   customerId: number,
   productId: number,
   quantityAssociated: number = 1,
-  fromDate?: string,
-  thruDate?: string // ✅ Add optional thruDate parameter
+ 
 ): Promise<RelationResponse> {
   return this.fetchWithAuth<RelationResponse>('/relations/assign-product-to-customer', {
     method: 'POST',
-    body: JSON.stringify({ customerId, productId, quantityAssociated, fromDate, thruDate }),
+    body: JSON.stringify({ customerId, productId, quantityAssociated }),
   });
 }
 

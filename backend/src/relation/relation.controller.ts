@@ -17,8 +17,9 @@ import { RelationService } from './relation.service';
 export interface AssignCustomerToWorkerDto {
   workerId: number;
   customerId: number;
-  fromDate?: string;
+  sequenceNumber: number; // added for delivery order
 }
+
 
 export interface AssignProductToCustomerDto {
   customerId: number;
@@ -39,8 +40,10 @@ export class RelationController {
       const relations = await this.relationService.getWorkerCustomerRelations();
       return { success: true, message: 'Worker-customer relations retrieved successfully', data: relations };
     } catch (error) {
+      console.log(error);
       return { success: false, message: 'Failed to fetch relations', data: [] };
     }
+    
   }
 
   @Post('assign-customer-to-worker')
@@ -54,19 +57,18 @@ export class RelationController {
     }
   }
 
-  @Delete('worker-customer/:workerId/:customerId')
-  async removeCustomerFromWorker(
-    @Param('workerId', ParseIntPipe) workerId: number,
-    @Param('customerId', ParseIntPipe) customerId: number,
-  ) {
-    try {
-      await this.relationService.removeCustomerFromWorker(workerId, customerId);
-      return { success: true, message: 'Customer removed from worker successfully' };
-    } catch (error) {
-      return { success: false, message: error.message || 'Failed to remove customer from worker' };
-    }
+@Delete('worker-customer/:workerId/:customerId')
+async removeCustomerFromWorker(
+  @Param('workerId', ParseIntPipe) workerId: number,
+  @Param('customerId', ParseIntPipe) customerId: number,
+) {
+  try {
+    await this.relationService.removeCustomerFromWorker(workerId, customerId);
+    return { success: true, message: 'Customer removed from worker successfully' };
+  } catch (error) {
+    return { success: false, message: error.message || 'Failed to remove customer from worker' };
   }
-
+}
   // Customer-Product Relations
   @Get('customer-products')
   async getCustomerProductRelations() {

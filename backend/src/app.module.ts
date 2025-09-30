@@ -8,6 +8,7 @@ import { CustomerModule } from './customers/customer.module';
 import { ProductModule } from './products/product.module';
 import { RelationModule } from './relation/relation.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { DailyActivityModule } from './dailyactivity/daily-activity.module';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { InventoryModule } from './inventory/inventory.module';
     UsersModule, 
     PrismaModule,
     WorkersModule,
-    CustomerModule,ProductModule, RelationModule, InventoryModule
+    CustomerModule,ProductModule, RelationModule, InventoryModule, DailyActivityModule
   ],
 })
 export class AppModule {}

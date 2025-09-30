@@ -14,7 +14,7 @@ async function bootstrap() {
     
   // Enable CORS with environment-based configuration
   app.enableCors({
-    origin: [process.env.FRONTEND_URL ], // Add localhost as fallback
+    origin: true, // Add localhost as fallback
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     credentials: true,

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, ParseIntPipe, UseGuards, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, ParseIntPipe, UseGuards, Query, HttpStatus, HttpCode } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -14,10 +14,10 @@ export class InventoryController {
   async updateAllInventories(@Body() body: { userId?: string; date?: string }) {
     try {
       const targetDate = body.date ? new Date(body.date) : new Date();
-      const result = await this.inventoryHelper.updateAllProductInventories(targetDate, body.userId);
+      const result = await this.inventoryHelper.storeDailyDemand(targetDate);
       return {
         success: true,
-        message: `Updated ${result.updatedCount} product inventories for ${targetDate.toDateString()}`,
+        message: `Updated ${result.count} product demand for ${targetDate.toDateString()}`,
         data: result
       };
     } catch (error) {
@@ -29,31 +29,14 @@ export class InventoryController {
     }
   }
 
-  @Post('initialize-today')
-async initializeTodayInventory(@Body() body: { userId?: string }) {
-  try {
-    const result = await this.inventoryHelper.initializeTodayInventory(body.userId);
-    return {
-      success: true,
-      message: `Initialized ${result.updatedCount} inventory records for today`,
-      data: result
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: error.message,
-      data: null
-    };
-  }
-}
 
   @Post('received/:productId')
   async updateReceivedQuantity(
     @Param('productId', ParseIntPipe) productId: number,
-    @Body() body: { receivedQuantity: number; userId: string; date?: string }
+    @Body() body: { receivedQuantity: number; userId: string; }
   ) {
     try {
-      const targetDate = body.date ? new Date(body.date) : new Date();
+      const targetDate = new Date();
       await this.inventoryHelper.updateReceivedQuantity(productId, body.receivedQuantity, targetDate, body.userId);
       return {
         success: true,
@@ -71,10 +54,10 @@ async initializeTodayInventory(@Body() body: { userId?: string }) {
   @Post('remaining/:productId')
   async updateRemainingQuantity(
     @Param('productId', ParseIntPipe) productId: number,
-    @Body() body: { remainingQuantity: number; userId: string; date?: string }
+    @Body() body: { remainingQuantity: number; userId: string;}
   ) {
     try {
-      const targetDate = body.date ? new Date(body.date) : new Date();
+      const targetDate = new Date();
       await this.inventoryHelper.updateRemainingQuantity(productId, body.remainingQuantity, targetDate, body.userId);
       return {
         success: true,
@@ -88,11 +71,11 @@ async initializeTodayInventory(@Body() body: { userId?: string }) {
     }
   }
 
-  @Get('summary')
-  async getInventorySummary(@Query('date') date?: string) {
+  @Get()
+  async getInventory(@Query('date') date?: string) {
     try {
       const targetDate = date ? new Date(date) : new Date();
-      const data = await this.inventoryHelper.getInventorySummary(targetDate);
+      const data = await this.inventoryHelper.getInventory(targetDate);
       return {
         success: true,
         message: `Inventory summary for ${targetDate.toDateString()} retrieved successfully`,
@@ -107,21 +90,33 @@ async initializeTodayInventory(@Body() body: { userId?: string }) {
     }
   }
 
-  @Get('dates')
-  async getAvailableDates() {
+@Get('demand-all')
+@HttpCode(HttpStatus.OK)
+  async getAllProductDemand(@Query('date') date?: string) {
     try {
-      const dates = await this.inventoryHelper.getAvailableDates();
+      const targetDate = date ? new Date(date) : new Date();
+      
+      const result = await this.inventoryHelper.getAllProductDemand(targetDate);
+      
       return {
         success: true,
-        message: 'Available dates retrieved successfully',
-        data: dates
+        message: 'Product demand retrieved successfully',
+        data: result.demands,
+        meta: {
+          date: targetDate.toDateString(),
+          totalProducts: result.demands.length,
+          totalDemand: result.demands.reduce((sum, item) => sum + item.totalDemand, 0),
+          calculated: result.wasCalculated ? 'Generated now' : 'From cache'
+        }
       };
     } catch (error) {
       return {
         success: false,
-        message: error.message,
-        data: []
+        message: error.message || 'Failed to get product demand',
+        data: null
       };
     }
   }
+
+
 }

@@ -1,276 +1,182 @@
-'use client';
-import React, { useState, useEffect } from 'react';
-import { toast, Toaster } from 'react-hot-toast';
-import HamburgerNavigation from '../../components/HamburgerNavigation';
-import { InventoryTable } from './InventoryTable';
-import { InventoryItem, inventoryApi } from './inventory';
+'use client'
 
-  const getTodayString = (): string => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+import React, { useState, useEffect } from 'react'
+import toast, { Toaster } from 'react-hot-toast'
+import HamburgerNavigation from '../../components/HamburgerNavigation'
+import InventoryTable from './InventoryTable'
+import { inventoryApi, InventoryItem } from './inventory'
 
-const getYesterdayString = (): string => {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const year = yesterday.getFullYear();
-  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-  const day = String(yesterday.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+interface DemandItem {
+  demandId: number;
+  productId: number;
+  totalDemand: number;
+  date: string;
+  product: {
+    productId: number;
+    productName: string;
+    currentProductPrice: string;
+    storeId: string;
+    imageUrl?: string;
+  };
+}
+
+interface CombinedInventoryItem {
+  productId: number;
+  demandId: number;
+  totalDemand: number;
+  product: {
+    productId: number;
+    productName: string;
+    currentProductPrice: string;
+    storeId: string;
+    imageUrl?: string;
+  };
+  // Inventory fields (optional)
+  inventoryId?: number;
+  receivedQuantity?: number;
+  remainingQuantity?: number;
+  entryByUserLoginId?: string;
+  lastUpdated?: string;
+  date?: string;
+}
 
 export default function InventoryPage() {
-  const [inventoryData, setInventoryData] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]); // ✅ Add selectedDate state
-  const [initializing, setInitializing] = useState(false); 
+  const [combinedData, setCombinedData] = useState<CombinedInventoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
+  const currentUserId = 'admin'
 
-useEffect(() => {
-    initializeAndFetchData(); // ✅ Call initialize first, then fetch
-  }, []);
-
-  useEffect(() => {
-    fetchInventoryData();
-  }, []);
-
-  // ✅ Add useEffect to fetch data when selectedDate changes
-  useEffect(() => {
-    if (selectedDate) {
-      fetchInventoryData();
-    }
-  }, [selectedDate]);
-
-  // ✅ UPDATE: fetchInventoryData to use selectedDate
-  const fetchInventoryData = async () => {
-    setLoading(true);
+  const fetchCombinedData = async () => {
     try {
-      const response = await inventoryApi.getInventorySummary(selectedDate); // ✅ Pass selectedDate
-      if (response.success) {
-        setInventoryData(response.data);
-      } else {
-        toast.error(response.message);
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to fetch inventory data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-   const initializeAndFetchData = async () => {
-    setLoading(true);
-    setInitializing(true);
-    
-    try {
-      // Step 1: Initialize today's inventory (only runs for today's date)
-      console.log('🚀 Auto-initializing today\'s inventory...');
-      const initResponse = await inventoryApi.initializeTodayInventory('system');
+      setLoading(true)
       
-      if (initResponse.success) {
-        if (initResponse.data?.updatedCount > 0) {
-          console.log(`✅ Initialized ${initResponse.data.updatedCount} inventory records for today`);
-          toast.success(`Initialized ${initResponse.data.updatedCount} products for today`);
-        } else {
-          console.log('ℹ️ Today\'s inventory already exists');
+      // Fetch demand data (always available)
+      const demandResponse = await inventoryApi.getDemandAll()
+      if (!demandResponse.success) {
+        throw new Error(demandResponse.message || 'Failed to fetch demand data')
+      }
+      
+      const demands: DemandItem[] = demandResponse.data
+      console.log('Demand data:', demands)
+      
+      // Fetch inventory data (may be empty if no products received)
+      const inventoryResponse = await inventoryApi.getInventorySummary()
+      const inventories: InventoryItem[] = inventoryResponse.success ? inventoryResponse.data : []
+      console.log('Inventory data:', inventories)
+      
+      // Combine demand and inventory data - demand is the primary source
+      const combined: CombinedInventoryItem[] = demands.map(demand => {
+        // Find matching inventory record
+        const inventory = inventories.find(inv => inv.productId === demand.productId)
+        
+        return {
+          productId: demand.productId,
+          demandId: demand.demandId,
+          totalDemand: demand.totalDemand,
+          product: demand.product,
+          // Inventory data (optional)
+          inventoryId: inventory?.inventoryId,
+          receivedQuantity: inventory?.receivedQuantity,
+          remainingQuantity: inventory?.remainingQuantity,
+          entryByUserLoginId: inventory?.entryByUserLoginId,
+          lastUpdated: inventory?.lastUpdated,
+          date: inventory?.date
         }
-      } else {
-        console.warn('⚠️ Initialize response:', initResponse.message);
-      }
+      })
+      
+      console.log('Combined data:', combined)
+      setCombinedData(combined)
+      
     } catch (error: any) {
-      console.error('❌ Failed to initialize today\'s inventory:', error);
-      // Don't show error toast - this is background operation
+      console.error('Error fetching data:', error)
+      toast.error(error.message || 'Failed to fetch inventory data')
     } finally {
-      setInitializing(false);
+      setLoading(false)
     }
+  }
 
-    // Step 2: Fetch inventory data for selected date
-    await fetchInventoryData();
-  };
-  const updateAllInventories = async () => {
-    setUpdating(true);
+  useEffect(() => {
+    fetchCombinedData()
+  }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
     try {
-      const response = await inventoryApi.updateAllInventories('admin');
-      if (response.success) {
-        toast.success(response.message);
-        fetchInventoryData(); // Refresh data
-      } else {
-        toast.error(response.message);
-      }
+      await fetchCombinedData()
+      toast.success('Data refreshed successfully')
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update inventories');
+      console.error('Error refreshing data:', error)
+      toast.error(error.message || 'Failed to refresh data')
     } finally {
-      setUpdating(false);
+      setRefreshing(false)
     }
-  };
+  }
 
-  // Calculate summary stats
-  const summaryStats = {
-    totalProducts: inventoryData.length,
-    totalOrderedQuantity: inventoryData.reduce((sum, item) => sum + item.totalOrderedQuantity, 0),
-    totalReceivedQuantity: inventoryData.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0),
-    totalRemainingQuantity: inventoryData.reduce((sum, item) => sum + (item.remainingQuantity || 0), 0), // ✅ Updated from distributed
-    totalValue: inventoryData.reduce((sum, item) => sum + (item.totalOrderedQuantity * Number(item.product.currentProductPrice)), 0),
-    pendingReceipt: inventoryData.filter(item => !item.receivedQuantity).length,
-    readyForDistribution: inventoryData.filter(item => item.receivedQuantity && !item.remainingQuantity && item.remainingQuantity !== 0).length,
-  };
+  const handleInventoryUpdate = async () => {
+    await fetchCombinedData()
+  }
 
   if (loading) {
     return (
-      <>
+      <div className="min-h-screen bg-gray-50">
         <HamburgerNavigation />
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading inventory data...</p>
           </div>
         </div>
-      </>
-    );
+      </div>
+    )
   }
 
   return (
-    <>
+    <div className="min-h-screen bg-gray-50">
       <HamburgerNavigation />
-      <div className="min-h-screen bg-gray-50">
-        <div className="pt-6 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-7xl mx-auto">
-            {/* Page Header */}
-            <div className="mb-8">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-                  <p className="mt-2 text-gray-600">
-                    Monitor and manage product inventory for {new Date(selectedDate).toLocaleDateString('en-IN', { 
-                      year: 'numeric', month: 'long', day: 'numeric' 
-                    })}
-                  </p>
-                </div>
-                
-                <div className="mt-4 md:mt-0">
-                  <button
-                    onClick={updateAllInventories}
-                    disabled={updating}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-                  >
-                    {updating ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Updating...
-                      </>
-                    ) : (
-                      'Recalculate All'
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500">Total Products</p>
-                    <p className="text-2xl font-semibold text-gray-900">{summaryStats.totalProducts}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">📦</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500">Ordered Quantity</p>
-                    <p className="text-2xl font-semibold text-gray-900">{summaryStats.totalOrderedQuantity}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">📋</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500">Received Quantity</p>
-                    <p className="text-2xl font-semibold text-gray-900">{summaryStats.totalReceivedQuantity}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">✅</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500">Total Value</p>
-                    <p className="text-2xl font-semibold text-gray-900">₹{summaryStats.totalValue.toFixed(2)}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Status Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-yellow-500">{summaryStats.pendingReceipt}</p>
-                  <p className="text-sm text-gray-600">Pending Receipt</p>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-blue-500">{summaryStats.readyForDistribution}</p>
-                  <p className="text-sm text-gray-600">Ready for Distribution</p>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-green-500">{summaryStats.totalRemainingQuantity}</p>
-                  <p className="text-sm text-gray-600">Remaining Stock</p>
-                </div>
-              </div>
-            </div>
-
-            {/* ✅ Pass selectedDate and setSelectedDate to InventoryTable */}
-            <InventoryTable
-              inventoryData={inventoryData}
-              onUpdate={fetchInventoryData}
-              selectedDate={selectedDate}
-              onDateChange={setSelectedDate}
-              getTodayString={getTodayString} // ✅ Pass helper function
-              getYesterdayString={getYesterdayString} 
-            />
-          </div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
+          <p className="mt-2 text-gray-600">
+            Monitor and manage product inventory for {new Date().toLocaleDateString('en-IN', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </p>
         </div>
 
-        {/* Global Toaster */}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: { background: '#1e40af', color: '#fff', fontWeight: '500' },
-            success: { style: { background: '#16a34a' } },
-            error: { style: { background: '#dc2626' } },
-          }}
+        <div className="mb-6 flex flex-wrap gap-4">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {refreshing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Data
+              </>
+            )}
+          </button>
+        </div>
+
+        <InventoryTable 
+          inventory={combinedData} 
+          onInventoryUpdate={handleInventoryUpdate}
+          currentUserId={currentUserId}
         />
       </div>
-    </>
-  );
+
+      <Toaster position="top-right" />
+    </div>
+  )
 }

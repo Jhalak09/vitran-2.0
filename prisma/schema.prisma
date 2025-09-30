@@ -64,6 +64,8 @@ model Worker {
   // Relations
   workerCustomers WorkerCustomer[]
   workerInventories WorkerInventory[]
+  cashInHands       CashInHand[]
+
 }
 
 enum store{
@@ -86,13 +88,16 @@ model Product {
   // Relations
   customerProducts CustomerProduct[]
   inventories      Inventory[]
+  productDemands ProductDemand[] // Add this relation
+
 }
 
 model WorkerCustomer {
   id         Int      @id @default(autoincrement())
   workerId   Int
-  customerId Int?     // ✅ MADE OPTIONAL - can be null initially
+  customerId Int    // ✅ MADE OPTIONAL - can be null initially
   fromDate   DateTime
+  sequenceNumber Int
   thruDate   DateTime?   // optional for ongoing relation
 
   // Relations
@@ -100,7 +105,20 @@ model WorkerCustomer {
   customer Customer? @relation(fields: [customerId], references: [customerId], onDelete: Cascade) // ✅ MADE OPTIONAL
 
   // ✅ UPDATED: Allow null customerId in unique constraint
-  @@unique([workerId, customerId])
+  //@@unique([workerId, customerId])
+}
+
+
+model ProductDemand {
+  demandId    Int      @id @default(autoincrement())
+  productId   Int
+  totalDemand Int      @default(0)
+  date        DateTime
+  
+  // Relations
+  product Product @relation(fields: [productId], references: [productId], onDelete: Cascade)
+  
+  @@unique([productId, date])
 }
 
 model CustomerProduct {
@@ -116,13 +134,12 @@ model CustomerProduct {
   product  Product? @relation(fields: [productId], references: [productId], onDelete: Cascade) // ✅ MADE OPTIONAL
 
   // ✅ UPDATED: Allow null productId in unique constraint  
-  @@unique([customerId, productId])
+  //@@unique([customerId, productId])
 }
 
 model Inventory {
   inventoryId          Int      @id @default(autoincrement())
   productId            Int
-  totalOrderedQuantity Int      // ✅ Calculated from CustomerProduct aggregation
   receivedQuantity     Int?     // ✅ Optional - Admin input when products received
   remainingQuantity    Int?     // ✅ Optional - End of day remaining (admin input)
   entryByUserLoginId   String?  // ✅ Optional - Set when admin makes entries
@@ -139,7 +156,7 @@ model WorkerInventory {
   id                       Int      @id @default(autoincrement())
   workerId                 Int
   inventoryId              Int
-  totalPickedQuantity Int?
+  totalPickedQuantity      Int?     //morningstock 
   remainingQuantity        Int?     // End of day input
   date                     DateTime @default(now())
 
@@ -151,25 +168,57 @@ model WorkerInventory {
 model CustomerInventory {
   id                Int      @id @default(autoincrement())
   customerId        Int
-  inventoryId       Int
+  inventoryId       Int 
   date              DateTime
-  deliveredQuantity Int
-  b2b_bill          Boolean  @default(false)
-  b2c_bill          Boolean  @default(false)
-  userLogin         String
+  deliveredQuantity Int 
+  userLogin         String 
+  verificationId    Int?
 
   // Relations
-  customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [customerId])
   // Note: inventoryId references Inventory table but no direct relation defined to avoid circular dependency
 }
 
 model PaymentReceived {
   id           Int      @id @default(autoincrement())
   customerId   Int
+  inventoryId  Int
   bill         Decimal  @db.Decimal(10,2)
   isCollected  Boolean  @default(false)
   date         DateTime @default(now())
 
   // Relations
   customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+}
+
+model CashInHand {
+  id             Int      @id @default(autoincrement())
+  workerId       Int
+  date           DateTime @default(now())
+  amount         Int
+  actualAmount   Int?     // Add this column for verified amount
+
+  // Relation
+  worker         Worker   @relation(fields: [workerId], references: [workerId])
+}
+
+model VerifiedDelivery {
+  verificationId  Int      
+  workerId        Int
+  customerId      Int
+  inventoryId     Int
+  productName     String
+  deliveredQuantity Int
+  bill            Decimal  @db.Decimal(10,2)
+  isCollected     Boolean
+  verifiedAt      DateTime @default(now())
+  verifiedBy      String
+
+    @@id([verificationId, workerId, customerId, inventoryId]) // Composite primary key
+  @@unique([workerId, customerId, inventoryId, verificationId]) // Prevent duplicates
+}
+
+model deliverycharge{
+  id              Int @id @default(autoincrement())
+  charge          Int
 }

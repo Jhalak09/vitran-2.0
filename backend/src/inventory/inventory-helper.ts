@@ -11,133 +11,167 @@ export class InventoryHelper {
   /**
    * Calculate total ordered quantity for a specific product based on active customer subscriptions
    */
-  async calculateProductDemand(productId: number): Promise<number> {
-    try {
-      const result = await this.prisma.customerProduct.aggregate({
-        where: {
-          productId,
-          OR: [
-            { thruDate: null },
-            { thruDate: { gt: new Date() } }
-          ]
-        },
-        _sum: { quantityAssociated: true }
-      });
-
-      return result._sum.quantityAssociated || 0;
-    } catch (error) {
-      this.logger.error(`Error calculating demand for product ${productId}:`, error);
-      return 0;
-    }
+  // Add this helper method at the top of the class
+private createDateFromString(dateInput?: Date | string): Date {
+  if (!dateInput) {
+    // Use current date in IST
+    const now = new Date();
+    const todayString = now.getFullYear() + '-' + 
+                       String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(now.getDate()).padStart(2, '0');
+    return new Date(todayString + 'T00:00:00.000Z');
   }
-
-  /**
-   * Update inventory for a specific product on a specific date
-   */
-  async updateProductInventory(productId: number, date?: Date, userId?: string): Promise<void> {
-    try {
-      const totalDemand = await this.calculateProductDemand(productId);
-      const targetDate = date || new Date();
-      targetDate.setHours(0, 0, 0, 0); // Start of day
-
-      // Check if inventory record exists for this date
-      const existingInventory = await this.prisma.inventory.findUnique({
-        where: {
-          productId_date: {
-            productId,
-            date: targetDate
-          }
-        }
-      });
-
-      if (existingInventory) {
-        // Update existing inventory
-        await this.prisma.inventory.update({
-          where: { inventoryId: existingInventory.inventoryId },
-          data: {
-            totalOrderedQuantity: totalDemand,
-            lastUpdated: new Date(),
-            entryByUserLoginId: userId || existingInventory.entryByUserLoginId,
-          }
-        });
-
-        this.logger.log(`Updated inventory for product ${productId} on ${targetDate.toDateString()}: demand=${totalDemand}`);
-      } else {
-        // Create new inventory record for this date
-        await this.prisma.inventory.create({
-          data: {
-            productId,
-            totalOrderedQuantity: totalDemand,
-            lastUpdated: new Date(),
-            entryByUserLoginId: userId,
-            date: targetDate
-          }
-        });
-
-        this.logger.log(`Created inventory for product ${productId} on ${targetDate.toDateString()}: demand=${totalDemand}`);
-      }
-    } catch (error) {
-      this.logger.error(`Error updating inventory for product ${productId}:`, error);
-      throw error;
-    }
+  
+  if (typeof dateInput === 'string') {
+    return new Date(dateInput + 'T00:00:00.000Z');
   }
+  
+  // If it's a Date object, normalize it to start of day
+  const dateStr = dateInput.getFullYear() + '-' + 
+                  String(dateInput.getMonth() + 1).padStart(2, '0') + '-' + 
+                  String(dateInput.getDate()).padStart(2, '0');
+  return new Date(dateStr + 'T00:00:00.000Z');
+}
 
-  /**
-   * Update inventory for all products on a specific date
-   */
-  async updateAllProductInventories(date?: Date, userId?: string): Promise<{updatedCount: number, errors: string[]}> {
-    const errors: string[] = [];
-    let updatedCount = 0;
-
-    try {
-      // Get all unique product IDs that have active customer subscriptions
-      const activeProductIds = await this.prisma.customerProduct.findMany({
-        where: {
-          productId: { not: null },
-          OR: [
-            { thruDate: null },
-            { thruDate: { gt: new Date() } }
-          ]
-        },
-        select: { productId: true },
-        distinct: ['productId']
-      });
-
-      this.logger.log(`Found ${activeProductIds.length} products with active subscriptions`);
-
-      // Update inventory for each product
-      for (const { productId } of activeProductIds) {
-        if (productId) {
-          try {
-            await this.updateProductInventory(productId, date, userId);
-            updatedCount++;
-          } catch (error) {
-            const errorMsg = `Failed to update product ${productId}: ${error.message}`;
-            errors.push(errorMsg);
-            this.logger.error(errorMsg);
-          }
-        }
-      }
-
-      this.logger.log(`Successfully updated ${updatedCount} product inventories`);
-      return { updatedCount, errors };
-    } catch (error) {
-      this.logger.error('Error in updateAllProductInventories:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get inventory summary for a specific date
-   */
-  async getInventorySummary(date?: Date): Promise<any[]> {
-    const targetDate = date || new Date();
-    targetDate.setHours(0, 0, 0, 0);
-
-    return this.prisma.inventory.findMany({
+/**
+ * Calculate total ordered quantity for a specific product based on active customer subscriptions
+ */
+async calculateProductDemand(productId: number, referenceDate?: Date): Promise<number> {
+  try {
+    // Use current date or provided reference date for comparison
+    const compareDate = referenceDate || new Date();
+    
+    const result = await this.prisma.customerProduct.aggregate({
       where: {
-        date: targetDate
+        productId,
+        OR: [
+          { thruDate: null },
+          { thruDate: { gt: compareDate } }
+        ]
       },
+      _sum: { quantityAssociated: true }
+    });
+
+    return result._sum.quantityAssociated || 0;
+  } catch (error) {
+    this.logger.error(`Error calculating demand for product ${productId}:`, error);
+    return 0;
+  }
+}
+
+async storeDailyDemand(date?: Date): Promise<{count: number}> {
+  const targetDate = this.createDateFromString(date);
+  let count = 0;
+
+  const products = await this.prisma.product.findMany({
+    select: { productId: true }
+  });
+
+  for (const product of products) {
+    const demand = await this.calculateProductDemand(product.productId, targetDate);
+    
+    await this.prisma.productDemand.upsert({
+      where: { productId_date: { productId: product.productId, date: targetDate } },
+      update: { totalDemand: demand },
+      create: { productId: product.productId, totalDemand: demand, date: targetDate }
+    });
+    count++;
+  }
+  
+  return { count };
+}
+
+
+/**
+ * Get inventory summary for a specific date
+ */
+async getInventory(date?: Date): Promise<any[]> {
+  const targetDate = this.createDateFromString(date);
+
+  return this.prisma.inventory.findMany({
+    where: { date: targetDate },
+    include: {
+    }
+  });
+}
+
+
+/**
+ * Update received quantity (admin input)
+ */
+async updateReceivedQuantity(productId: number, receivedQty: number, date: Date | string, userId: string): Promise<void> {
+  try {
+    const targetDate = this.createDateFromString(date);
+    
+    this.logger.log(`Updating received quantity for product ${productId} on ${targetDate.toISOString()}: ${receivedQty}`);
+    const newInventory = await this.prisma.inventory.create({
+        data: {
+          productId,
+          receivedQuantity: receivedQty,
+          remainingQuantity: null, // Will be filled later
+          entryByUserLoginId: userId,
+          lastUpdated: new Date(),
+          date: targetDate
+        }
+      });
+      this.logger.log(`Created new inventory record ${newInventory.inventoryId} for product ${productId}: ${receivedQty}`);
+    
+
+    this.logger.log(`Successfully processed received quantity for product ${productId} on ${targetDate.toDateString()}: ${receivedQty}`);
+  } catch (error) {
+    this.logger.error(`Error updating received quantity for product ${productId}:`, error);
+    throw error;
+  }
+    
+}
+
+/**
+ * Update remaining quantity (end of day admin input)
+ */
+async updateRemainingQuantity(productId: number, remainingQty: number, date: Date | string, userId: string): Promise<void> {
+  try {
+    const targetDate = this.createDateFromString(date);
+    
+    this.logger.log(`Updating remaining quantity for product ${productId} on ${targetDate.toISOString()}: ${remainingQty}`);
+
+    const inventory = await this.prisma.inventory.findUnique({
+      where: {
+        productId_date: {
+          productId,
+          date: targetDate
+        }
+      }
+    });
+
+    if (!inventory) {
+      throw new Error(`No inventory record found for product ${productId} on ${targetDate.toDateString()}`);
+    }
+
+    await this.prisma.inventory.update({
+      where: { inventoryId: inventory.inventoryId },
+      data: {
+        remainingQuantity: remainingQty,
+        entryByUserLoginId: userId,
+        lastUpdated: new Date()
+      }
+    });
+
+    this.logger.log(`Updated remaining quantity for product ${productId} on ${targetDate.toDateString()}: ${remainingQty}`);
+  } catch (error) {
+    this.logger.error(`Error updating remaining quantity for product ${productId}:`, error);
+    throw error;
+  }
+}
+
+
+ async getAllProductDemand(date?: Date): Promise<{demands: any[], wasCalculated: boolean}> {
+    const targetDate = this.createDateFromString(date);
+    
+    this.logger.log(`Getting all product demand for ${targetDate.toDateString()}`);
+
+    // First, check if demand data exists for this date
+    const existingDemands = await this.prisma.productDemand.findMany({
+      where: { date: targetDate },
       include: {
         product: {
           select: {
@@ -149,115 +183,48 @@ export class InventoryHelper {
           }
         }
       },
-      orderBy: { totalOrderedQuantity: 'desc' }
-    });
-  }
-
-  /**
-   * Update received quantity (admin input)
-   */
-  async updateReceivedQuantity(productId: number, receivedQty: number, date: Date, userId: string): Promise<void> {
-    try {
-      const targetDate = new Date(date);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const inventory = await this.prisma.inventory.findUnique({
-        where: {
-          productId_date: {
-            productId,
-            date: targetDate
-          }
-        }
-      });
-
-      if (!inventory) {
-        throw new Error(`No inventory record found for product ${productId} on ${targetDate.toDateString()}`);
-      }
-
-      await this.prisma.inventory.update({
-        where: { inventoryId: inventory.inventoryId },
-        data: {
-          receivedQuantity: receivedQty,
-          entryByUserLoginId: userId,
-          lastUpdated: new Date()
-        }
-      });
-
-      this.logger.log(`Updated received quantity for product ${productId} on ${targetDate.toDateString()}: ${receivedQty}`);
-    } catch (error) {
-      this.logger.error(`Error updating received quantity for product ${productId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Update remaining quantity (end of day admin input)
-   */
-  async updateRemainingQuantity(productId: number, remainingQty: number, date: Date, userId: string): Promise<void> {
-    try {
-      const targetDate = new Date(date);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const inventory = await this.prisma.inventory.findUnique({
-        where: {
-          productId_date: {
-            productId,
-            date: targetDate
-          }
-        }
-      });
-
-      if (!inventory) {
-        throw new Error(`No inventory record found for product ${productId} on ${targetDate.toDateString()}`);
-      }
-
-      await this.prisma.inventory.update({
-        where: { inventoryId: inventory.inventoryId },
-        data: {
-          remainingQuantity: remainingQty,
-          entryByUserLoginId: userId,
-          lastUpdated: new Date()
-        }
-      });
-
-      this.logger.log(`Updated remaining quantity for product ${productId} on ${targetDate.toDateString()}: ${remainingQty}`);
-    } catch (error) {
-      this.logger.error(`Error updating remaining quantity for product ${productId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get available dates for inventory (for date navigation)
-   */
-  async getAvailableDates(limit: number = 30): Promise<Date[]> {
-    const result = await this.prisma.inventory.findMany({
-      select: { date: true },
-      distinct: ['date'],
-      orderBy: { date: 'desc' },
-      take: limit
+      orderBy: { totalDemand: 'desc' }
     });
 
-    return result.map(item => item.date);
+    // If demand data exists, return it
+    if (existingDemands.length > 0) {
+      this.logger.log(`Found existing demand data: ${existingDemands.length} products`);
+      return {
+        demands: existingDemands,
+        wasCalculated: false
+      };
+    }
+
+    // If no demand data exists, calculate it first
+    this.logger.log(`No demand data found for ${targetDate.toDateString()}, calculating now...`);
+    
+    await this.storeDailyDemand(targetDate);
+
+    // Fetch the newly calculated demand data
+    const newDemands = await this.prisma.productDemand.findMany({
+      where: { date: targetDate },
+      
+      include: {
+        product: {
+          select: {
+            productId: true,
+            productName: true,
+            currentProductPrice: true,
+            storeId: true,
+            imageUrl: true
+          }
+        }
+      },
+      orderBy: { totalDemand: 'desc' }
+    });
+
+    this.logger.log(`Calculated and stored demand for ${newDemands.length} products`);
+    
+    return {
+      demands: newDemands,
+      wasCalculated: true
+    };
   }
 
-  /**
-   * Initialize today's inventory (create records for all active products)
-   */
- async initializeTodayInventory(userId?: string): Promise<{updatedCount: number, errors: string[]}> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
-  // Check if today's inventory already exists
-  const existingCount = await this.prisma.inventory.count({
-    where: { date: today }
-  });
-
-  if (existingCount > 0) {
-    return { updatedCount: 0, errors: [`Inventory for ${today.toDateString()} already exists`] };
-  }
-
-  // Create today's inventory - this will return the correct type
-  return this.updateAllProductInventories(today, userId);
-}
 }

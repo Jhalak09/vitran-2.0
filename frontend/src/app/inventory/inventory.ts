@@ -1,14 +1,11 @@
-// lib/inventory.ts
 export interface InventoryItem {
-  inventoryId: number;
+  inventoryId?: number;
   productId: number;
-  totalOrderedQuantity: number;
   receivedQuantity?: number;
   remainingQuantity?: number;
-  distributedQuantity?: number;
   entryByUserLoginId?: string;
-  lastUpdated: string;
-  date: string;
+  lastUpdated?: string;
+  date?: string;
   product: {
     productId: number;
     productName: string;
@@ -16,6 +13,7 @@ export interface InventoryItem {
     storeId: string;
     imageUrl?: string;
   };
+  totalDemand?: number; // Add this for combined data
 }
 
 export interface InventoryResponse {
@@ -24,13 +22,25 @@ export interface InventoryResponse {
   data: InventoryItem[];
 }
 
+export interface DemandResponse {
+  success: boolean;
+  message: string;
+  data: any[];
+  meta?: {
+    date: string;
+    totalProducts: number;
+    totalDemand: number;
+    calculated: string;
+  };
+}
+
 export interface UpdateInventoryResponse {
   success: boolean;
   message: string;
   data?: any;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 
 class InventoryApiService {
   private getAuthHeaders(): HeadersInit {
@@ -72,10 +82,16 @@ class InventoryApiService {
     }
   }
 
+  // Get demand data
+  async getDemandAll(date?: string): Promise<DemandResponse> {
+    const url = date ? `/inventory/demand-all?date=${date}` : '/inventory/demand-all';
+    return this.fetchWithAuth<DemandResponse>(url);
+  }
+
   // Get inventory summary
   async getInventorySummary(date?: string): Promise<InventoryResponse> {
-    const params = date ? `?date=${date}` : '';
-    return this.fetchWithAuth<InventoryResponse>(`/inventory/summary${params}`);
+    const url = date ? `/inventory?date=${date}` : '/inventory';
+    return this.fetchWithAuth<InventoryResponse>(url);
   }
 
   // Update all inventories
@@ -86,43 +102,22 @@ class InventoryApiService {
     });
   }
 
-  // Update specific product inventory
-  async updateProductInventory(productId: number, userId?: string): Promise<UpdateInventoryResponse> {
-    return this.fetchWithAuth<UpdateInventoryResponse>(`/inventory/update-product/${productId}`, {
-      method: 'POST',
-      body: JSON.stringify({ userId }),
-    });
-  }
-
-   // Update received quantity for specific date
-  async updateReceivedQuantity(productId: number, receivedQuantity: number, userId: string, date?: string): Promise<UpdateInventoryResponse> {
+  // Update received quantity
+  async updateReceivedQuantity(productId: number, receivedQuantity: number, userId: string): Promise<UpdateInventoryResponse> {
     return this.fetchWithAuth<UpdateInventoryResponse>(`/inventory/received/${productId}`, {
       method: 'POST',
-      body: JSON.stringify({ receivedQuantity, userId, date }),
+      body: JSON.stringify({ receivedQuantity, userId }),
     });
   }
 
-  // ✅ NEW: Update remaining quantity (end of day)
-  async updateRemainingQuantity(productId: number, remainingQuantity: number, userId: string, date?: string): Promise<UpdateInventoryResponse> {
+  // Update remaining quantity
+  async updateRemainingQuantity(productId: number, remainingQuantity: number, userId: string): Promise<UpdateInventoryResponse> {
     return this.fetchWithAuth<UpdateInventoryResponse>(`/inventory/remaining/${productId}`, {
       method: 'POST',
-      body: JSON.stringify({ remainingQuantity, userId, date }),
+      body: JSON.stringify({ remainingQuantity, userId }),
     });
   }
 
-  // Initialize today's inventory
-  async initializeTodayInventory(userId?: string): Promise<UpdateInventoryResponse> {
-    return this.fetchWithAuth<UpdateInventoryResponse>('/inventory/initialize-today', {
-      method: 'POST',
-      body: JSON.stringify({ userId }),
-    });
-  }
-
-  // Get available dates
-  async getAvailableDates(): Promise<{success: boolean; data: string[]}> {
-    return this.fetchWithAuth<{success: boolean; data: string[]}>('/inventory/dates');
-  }
- 
   // Helper method for image URLs
   getImageUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http')) {

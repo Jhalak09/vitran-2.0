@@ -15,7 +15,7 @@ export class UpdateWorkerDto {
   phoneNumber: string;
 
   @IsOptional()
-  @MinLength(6)
+  @MinLength(4)
   password?: string;
 
   @IsOptional()

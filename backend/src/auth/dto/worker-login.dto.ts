@@ -7,6 +7,6 @@ export class WorkerLoginDto {
 
   @IsString()
   @IsNotEmpty()
-  @MinLength(6)
+  @MinLength(4)
   password: string;
 }

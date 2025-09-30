@@ -1,13 +1,8 @@
 'use client';
+
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-hot-toast';
-import { SearchableDropdown } from './SearchableDropdown';
-import {
-  WorkerCustomerRelation,
-  Worker,
-  Customer,
-  relationApi,
-} from './relation';
+import toast from 'react-hot-toast';
+import { WorkerCustomerRelation, Worker, Customer, relationApi } from './relation';
 
 interface WorkerCustomerRelationsProps {
   relations: WorkerCustomerRelation[];
@@ -21,84 +16,81 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [availableCustomers, setAvailableCustomers] = useState<Customer[]>([]);
-  
   const [selectedWorker, setSelectedWorker] = useState<number | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<number | null>(null);
+  const [sequenceNumber, setSequenceNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ✅ Add search states
+  // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'ended'>('all');
 
   useEffect(() => {
-    fetchInitialData();
+    const fetchData = async () => {
+      try {
+        const [workersRes, customersRes] = await Promise.all([
+          relationApi.getAllWorkers(),
+          relationApi.getAllCustomers(),
+        ]);
+        setWorkers(workersRes.data);
+        setCustomers(customersRes.data);
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to load data');
+      }
+    };
+    fetchData();
   }, []);
 
-  const fetchInitialData = async () => {
-    try {
-      const [workersRes, customersRes] = await Promise.all([
-        relationApi.getAllWorkers(),
-        relationApi.getAllCustomers(),
-      ]);
-
-      if (workersRes.success) setWorkers(workersRes.data);
-      if (customersRes.success) setCustomers(customersRes.data);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to fetch data');
-    }
-  };
-
-  const handleWorkerSelect = async (workerId: number | string | null) => {
-    if (!workerId) {
-      setSelectedWorker(null);
+  // Filter customers: exclude those with ACTIVE assignments to ANY worker (including selected worker)
+  useEffect(() => {
+    if (!selectedWorker) {
       setAvailableCustomers([]);
       return;
     }
 
-    setSelectedWorker(Number(workerId));
-    try {
-      const response = await relationApi.getAvailableCustomersForWorker(Number(workerId));
-      if (response.success) {
-        setAvailableCustomers(response.data);
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to fetch available customers');
-    }
-  };
+    // Get customer IDs that have active assignments (no thruDate) to ANY worker
+    const activelyAssignedCustomerIds = relations
+      .filter(rel => !rel.thruDate) // No thruDate means active assignment
+      .map(rel => rel.customerId);
+
+    // Show only customers that are NOT actively assigned to anyone
+    const filtered = customers.filter(
+      c => !activelyAssignedCustomerIds.includes(c.customerId)
+    );
+
+    setAvailableCustomers(filtered);
+  }, [selectedWorker, customers, relations]);
 
   const assignCustomer = async () => {
-    if (!selectedWorker || !selectedCustomer) {
-      toast.error('Please select both worker and customer');
+    if (!selectedWorker || !selectedCustomer || !sequenceNumber) {
+      toast.error('Please select worker, customer, and sequence number');
       return;
     }
-
     setLoading(true);
     try {
-      const response = await relationApi.assignCustomerToWorker(selectedWorker, selectedCustomer);
-      if (response.success) {
-        toast.success(response.message);
-        onUpdate();
-        setSelectedWorker(null);
-        setSelectedCustomer(null);
-        setAvailableCustomers([]);
-      } else {
-        toast.error(response.message);
-      }
+      await relationApi.assignCustomerToWorker({
+        workerId: selectedWorker,
+        customerId: selectedCustomer,
+        sequenceNumber,
+      });
+      toast.success('Customer assigned successfully');
+      onUpdate();
+      setSelectedCustomer(null);
+      setSequenceNumber(null);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to assign customer to worker');
+      toast.error(error.message || 'Failed to assign customer');
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Updated to DELETE from database instead of just ending relation
   const removeCustomer = async (workerId: number, customerId: number) => {
-    if (!confirm('Are you sure you want to permanently remove this customer from the worker? This action cannot be undone.')) return;
+    if (!confirm('Are you sure you want to remove this customer from the worker? This will set the through date to now.')) return;
 
     try {
       const response = await relationApi.deleteWorkerCustomerRelation(workerId, customerId);
       if (response.success) {
-        toast.success('Customer permanently removed from worker');
+        toast.success('Customer removed from worker');
         onUpdate();
       } else {
         toast.error(response.message);
@@ -108,166 +100,189 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
     }
   };
 
-  // ✅ Add filtering logic
-  const filteredRelations = relations.filter(relation => {
-    const matchesSearch = searchTerm === '' || 
+  const clearForm = () => {
+    setSelectedWorker(null);
+    setSelectedCustomer(null);
+    setSequenceNumber(null);
+  };
+
+  // Filter relations for display
+  const filteredRelations = relations.filter((relation) => {
+    const matchesSearch =
+      !searchTerm ||
       relation.worker.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       relation.worker.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.worker.phoneNumber.includes(searchTerm) ||
       relation.customer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.customer.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.customer.phoneNumber.includes(searchTerm) ||
-      relation.customer.city.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || 
-      (statusFilter === 'active' && !relation.thruDate) ||
-      (statusFilter === 'ended' && relation.thruDate);
-
-    return matchesSearch && matchesStatus;
+      relation.customer.lastName.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (statusFilter === 'active') return matchesSearch && !relation.thruDate;
+    if (statusFilter === 'ended') return matchesSearch && !!relation.thruDate;
+    return matchesSearch;
   });
-
-  // Prepare options for dropdowns
-  const workerOptions = workers.map(worker => ({
-    value: worker.workerId,
-    label: `${worker.firstName} ${worker.lastName}`,
-    subtitle: worker.phoneNumber,
-  }));
-
-  const customerOptions = availableCustomers.map(customer => ({
-    value: customer.customerId,
-    label: `${customer.firstName} ${customer.lastName}`,
-    subtitle: `${customer.city} • ${customer.phoneNumber}`,
-  }));
-
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   return (
     <div className="space-y-6">
       {/* Assignment Form */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Assign Customer to Worker</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h2 className="text-xl font-semibold mb-6">Assign Customer to Worker</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Worker</label>
-            <SearchableDropdown
-              options={workerOptions}
-              value={selectedWorker}
-              onChange={handleWorkerSelect}
-              placeholder="Choose a worker..."
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Worker
+            </label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedWorker ?? ''}
+              onChange={e => setSelectedWorker(Number(e.target.value))}
+            >
+              <option value="">Choose a worker...</option>
+              {workers.map(w => (
+                <option key={w.workerId} value={w.workerId}>
+                  {w.firstName} {w.lastName}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Customer</label>
-            <SearchableDropdown
-              options={customerOptions}
-              value={selectedCustomer}
-              onChange={(value) => setSelectedCustomer(value as number | null)}
-              placeholder="Choose a customer..."
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Customer
+            </label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedCustomer ?? ''}
+              onChange={e => setSelectedCustomer(Number(e.target.value))}
               disabled={!selectedWorker}
+            >
+              <option value="">Choose a customer...</option>
+              {availableCustomers.map(c => (
+                <option key={c.customerId} value={c.customerId}>
+                  {c.firstName} {c.lastName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sequence Number
+            </label>
+            <input
+              type="number"
+              min={1}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={sequenceNumber ?? ''}
+              onChange={e => setSequenceNumber(Number(e.target.value))}
+              placeholder="1"
             />
           </div>
 
-          <div className="flex items-end">
+          <div className="flex gap-2">
             <button
               onClick={assignCustomer}
-              disabled={!selectedWorker || !selectedCustomer || loading}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || !selectedWorker || !selectedCustomer || !sequenceNumber}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Assigning...' : 'Assign Customer'}
+              Assign Customer
+            </button>
+            <button
+              onClick={clearForm}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+            >
+              Clear
             </button>
           </div>
         </div>
       </div>
 
-      {/* ✅ Add Search and Filter Section */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h2 className="text-xl font-semibold">Worker-Customer Assignments ({filteredRelations.length})</h2>
+      {/* Search and Filter */}
+      <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <h3 className="text-lg font-semibold">Worker Customer Relations ({filteredRelations.length})</h3>
           
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search workers, customers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pl-10"
-              />
-              <svg
-                className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-
-            {/* Status Filter */}
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search customers, workers..."
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'ended')}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'ended')}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Assignments</option>
-              <option value="active">Active Only</option>
-              <option value="ended">Ended Only</option>
+              <option value="all">All Relations</option>
+              <option value="active">Active</option>
+              <option value="ended">Ended</option>
             </select>
           </div>
         </div>
       </div>
 
       {/* Relations Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {filteredRelations.length === 0 ? (
-          <div className="px-6 py-8 text-center text-gray-500">
-            <div className="text-lg font-medium">
-              {searchTerm || statusFilter !== 'all' 
-                ? 'No matching assignments found' 
-                : 'No worker-customer assignments'
-              }
-            </div>
-            <p className="text-sm">
-              {searchTerm || statusFilter !== 'all'
-                ? 'Try adjusting your search or filter criteria'
-                : 'Create your first assignment using the form above'
-              }
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  WORKER
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  CUSTOMER
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SEQUENCE
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  FROM DATE
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  THROUGH DATE
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  STATUS
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  ACTIONS
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredRelations.length === 0 ? (
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Worker</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Through Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    {searchTerm || statusFilter !== 'all' 
+                      ? 'Try adjusting your search or filter criteria' 
+                      : 'Create your first assignment using the form above'
+                    }
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredRelations.map((relation) => (
-                  <tr key={relation.id} className="hover:bg-gray-50 transition-colors">
+              ) : (
+                filteredRelations.map(relation => (
+                  <tr 
+                    key={relation.id} 
+                    className={`hover:bg-gray-50 ${relation.thruDate ? 'opacity-60' : ''}`}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {relation.worker.firstName} {relation.worker.lastName}
-                        </div>
-                        <div className="text-sm text-gray-500">{relation.worker.phoneNumber}</div>
-                        <div className={`text-xs mt-1 ${
-                          relation.worker.isActive ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {relation.worker.isActive ? '● Active' : '● Inactive'}
+                      <div className="flex items-center">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {relation.worker.firstName} {relation.worker.lastName}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {relation.worker.phoneNumber}
+                          </div>
+                          <div className="flex items-center mt-1">
+                            <div className={`h-2 w-2 rounded-full ${relation.worker.isActive ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                            <span className={`ml-1 text-xs ${relation.worker.isActive ? 'text-green-600' : 'text-gray-500'}`}>
+                              {relation.worker.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -279,10 +294,13 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
                         <div className="text-sm text-gray-500">
                           {relation.customer.city} • {relation.customer.phoneNumber}
                         </div>
-                        <div className="text-xs text-blue-600 mt-1">
+                        <div className="text-xs text-blue-600 font-medium">
                           {relation.customer.classification}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {relation.sequenceNumber}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(relation.fromDate)}
@@ -300,20 +318,27 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => removeCustomer(relation.workerId, relation.customerId)}
-                        className="text-red-600 hover:text-red-900 transition-colors"
-                      >
-                        Delete
-                      </button>
+                      {!relation.thruDate && (
+                        <button 
+                          onClick={() => removeCustomer(relation.workerId, relation.customerId)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 };
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString();
+}

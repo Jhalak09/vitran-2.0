@@ -176,7 +176,7 @@ export default function CreateWorkerModal({ isOpen, onClose, onWorkerCreated }: 
             placeholder="Password"
             value={createForm.password}
             required
-            minLength={6}
+            minLength={4}
             onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
             style={{
               padding: '12px 16px',

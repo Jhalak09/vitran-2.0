@@ -1,50 +1,57 @@
 'use client';
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { InventoryItem, inventoryApi } from './inventory';
+import { inventoryApi } from './inventory';
 
-interface InventoryTableProps {
-  inventoryData: InventoryItem[];
-  onUpdate: () => void;
-  selectedDate: string;
-  onDateChange: (date: string) => void;
-  getTodayString: () => string; // ✅ Add helper function prop
-  getYesterdayString: () => string; // ✅ Add helper function prop
+interface CombinedInventoryItem {
+  productId: number;
+  demandId: number;
+  totalDemand: number;
+  product: {
+    productId: number;
+    productName: string;
+    currentProductPrice: string;
+    storeId: string;
+    imageUrl?: string;
+  };
+  inventoryId?: number;
+  receivedQuantity?: number;
+  remainingQuantity?: number;
+  entryByUserLoginId?: string;
+  lastUpdated?: string;
+  date?: string;
 }
 
-export const InventoryTable: React.FC<InventoryTableProps> = ({
-  inventoryData,
-  onUpdate,
-  selectedDate, // ✅ Use prop instead of local state
-  onDateChange,
-getTodayString, // ✅ Use prop
-  getYesterdayString, // ✅ Use prop instead of local state setter
-}) => {
+interface InventoryTableProps {
+  inventory: CombinedInventoryItem[];
+  onInventoryUpdate: () => void;
+  currentUserId: string;
+}
+
+export default function InventoryTable({ 
+  inventory, 
+  onInventoryUpdate, 
+  currentUserId 
+}: InventoryTableProps) {
   const [editingReceived, setEditingReceived] = useState<{[key: number]: string}>({});
   const [editingRemaining, setEditingRemaining] = useState<{[key: number]: string}>({});
   const [loading, setLoading] = useState<{[key: number]: boolean}>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'received' | 'completed'>('all');
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
   
-  // Helper functions
-  React.useEffect(() => {
-    fetchAvailableDates();
-  }, []);
+  // Local state for optimistic updates
+  const [localUpdates, setLocalUpdates] = useState<{[key: number]: Partial<CombinedInventoryItem>}>({});
 
-  const fetchAvailableDates = async () => {
-    try {
-      const response = await inventoryApi.getAvailableDates();
-      if (response.success) {
-        const dates = response.data.map(date => new Date(date).toISOString().split('T')[0]);
-        setAvailableDates(dates);
-      }
-    } catch (error) {
-      console.error('Failed to fetch available dates:', error);
-    }
+  // Apply local updates to inventory data
+  const getUpdatedInventory = () => {
+    return inventory.map(item => ({
+      ...item,
+      ...(localUpdates[item.productId] || {})
+    }));
   };
 
-  const formatDate = (dateString: string): string => {
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -58,10 +65,9 @@ getTodayString, // ✅ Use prop
     return `₹${value.toFixed(2)}`;
   };
 
-  // ✅ UPDATED: Simplified status logic (no distributed)
-  const getStatus = (item: InventoryItem): string => {
+  const getStatus = (item: CombinedInventoryItem): string => {
     if (!item.receivedQuantity) return 'pending';
-    if (!item.remainingQuantity && item.remainingQuantity !== 0) return 'received';
+    if (item.remainingQuantity === undefined || item.remainingQuantity === null) return 'received';
     return 'completed';
   };
 
@@ -74,8 +80,9 @@ getTodayString, // ✅ Use prop
     }
   };
 
-  // Filter inventory data
-  const filteredData = inventoryData.filter(item => {
+  // Use updated inventory for filtering
+  const updatedInventory = getUpdatedInventory();
+  const filteredData = updatedInventory.filter(item => {
     const matchesSearch = searchTerm === '' || 
       item.product.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.product.storeId.toLowerCase().includes(searchTerm.toLowerCase());
@@ -86,56 +93,146 @@ getTodayString, // ✅ Use prop
     return matchesSearch && matchesStatus;
   });
 
-  // ✅ UPDATED: Update received quantity with selectedDate
   const updateReceivedQuantity = async (productId: number, receivedQty: number) => {
     if (receivedQty < 1) {
       toast.error('Received quantity must be at least 1');
       return;
     }
 
+    // Optimistic update - immediately update local state
+    setLocalUpdates(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        receivedQuantity: receivedQty,
+        lastUpdated: new Date().toISOString(),
+        entryByUserLoginId: currentUserId
+      }
+    }));
+
+    // Clear editing state immediately
+    setEditingReceived(prev => {
+      const newState = { ...prev };
+      delete newState[productId];
+      return newState;
+    });
+
+    // Show loading state
     setLoading(prev => ({ ...prev, [productId]: true }));
+
     try {
-      const response = await inventoryApi.updateReceivedQuantity(productId, receivedQty, 'admin', selectedDate);
+      const response = await inventoryApi.updateReceivedQuantity(productId, receivedQty, currentUserId);
       if (response.success) {
         toast.success('Received quantity updated successfully');
-        onUpdate();
-        setEditingReceived(prev => {
-          const newState = { ...prev };
-          delete newState[productId];
-          return newState;
-        });
+        // Don't call onInventoryUpdate() to avoid refresh
+        
+        // Update local state with server response if needed
+        setLocalUpdates(prev => ({
+          ...prev,
+          [productId]: {
+            ...prev[productId],
+            receivedQuantity: receivedQty,
+            lastUpdated: new Date().toISOString(),
+            entryByUserLoginId: currentUserId
+          }
+        }));
       } else {
+        // Revert optimistic update on error
+        setLocalUpdates(prev => {
+          const newUpdates = { ...prev };
+          if (newUpdates[productId]) {
+            delete newUpdates[productId].receivedQuantity;
+            delete newUpdates[productId].lastUpdated;
+            delete newUpdates[productId].entryByUserLoginId;
+          }
+          return newUpdates;
+        });
         toast.error(response.message);
       }
     } catch (error: any) {
+      // Revert optimistic update on error
+      setLocalUpdates(prev => {
+        const newUpdates = { ...prev };
+        if (newUpdates[productId]) {
+          delete newUpdates[productId].receivedQuantity;
+          delete newUpdates[productId].lastUpdated;
+          delete newUpdates[productId].entryByUserLoginId;
+        }
+        return newUpdates;
+      });
       toast.error(error.message || 'Failed to update received quantity');
     } finally {
       setLoading(prev => ({ ...prev, [productId]: false }));
     }
   };
 
-  // ✅ UPDATED: Update remaining quantity with selectedDate
   const updateRemainingQuantity = async (productId: number, remainingQty: number) => {
     if (remainingQty < 0) {
       toast.error('Remaining quantity cannot be negative');
       return;
     }
 
+    // Optimistic update - immediately update local state
+    setLocalUpdates(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        remainingQuantity: remainingQty,
+        lastUpdated: new Date().toISOString(),
+        entryByUserLoginId: currentUserId
+      }
+    }));
+
+    // Clear editing state immediately
+    setEditingRemaining(prev => {
+      const newState = { ...prev };
+      delete newState[productId];
+      return newState;
+    });
+
+    // Show loading state
     setLoading(prev => ({ ...prev, [productId]: true }));
+
     try {
-      const response = await inventoryApi.updateRemainingQuantity(productId, remainingQty, 'admin', selectedDate);
+      const response = await inventoryApi.updateRemainingQuantity(productId, remainingQty, currentUserId);
       if (response.success) {
         toast.success('Remaining quantity updated successfully');
-        onUpdate();
-        setEditingRemaining(prev => {
-          const newState = { ...prev };
-          delete newState[productId];
-          return newState;
-        });
+        // Don't call onInventoryUpdate() to avoid refresh
+        
+        // Update local state with server response
+        setLocalUpdates(prev => ({
+          ...prev,
+          [productId]: {
+            ...prev[productId],
+            remainingQuantity: remainingQty,
+            lastUpdated: new Date().toISOString(),
+            entryByUserLoginId: currentUserId
+          }
+        }));
       } else {
+        // Revert optimistic update on error
+        setLocalUpdates(prev => {
+          const newUpdates = { ...prev };
+          if (newUpdates[productId]) {
+            delete newUpdates[productId].remainingQuantity;
+            delete newUpdates[productId].lastUpdated;
+            delete newUpdates[productId].entryByUserLoginId;
+          }
+          return newUpdates;
+        });
         toast.error(response.message);
       }
     } catch (error: any) {
+      // Revert optimistic update on error
+      setLocalUpdates(prev => {
+        const newUpdates = { ...prev };
+        if (newUpdates[productId]) {
+          delete newUpdates[productId].remainingQuantity;
+          delete newUpdates[productId].lastUpdated;
+          delete newUpdates[productId].entryByUserLoginId;
+        }
+        return newUpdates;
+      });
       toast.error(error.message || 'Failed to update remaining quantity');
     } finally {
       setLoading(prev => ({ ...prev, [productId]: false }));
@@ -147,10 +244,9 @@ getTodayString, // ✅ Use prop
       {/* Search and Filter Section */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h2 className="text-xl font-semibold">Inventory Management ({filteredData.length})</h2>
+          <h2 className="text-xl font-semibold">Today's Inventory & Demand ({filteredData.length})</h2>
           
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search Input */}
             <div className="relative">
               <input
                 type="text"
@@ -169,7 +265,6 @@ getTodayString, // ✅ Use prop
               </svg>
             </div>
 
-            {/* ✅ UPDATED: Status Filter Options */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -184,64 +279,20 @@ getTodayString, // ✅ Use prop
         </div>
       </div>
 
-      {/* ✅ UPDATED: Date Navigation Tabs using props */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onDateChange(getTodayString())}
-            className={`px-4 py-2 rounded-md ${
-              selectedDate === getTodayString()
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Today ({new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })})
-          </button>
-          
-          <button
-            onClick={() => onDateChange(getYesterdayString())}
-            className={`px-4 py-2 rounded-md ${
-              selectedDate === getYesterdayString()
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Yesterday ({new Date(Date.now() - 86400000).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })})
-          </button>
-
-          {availableDates.slice(2).map(date => (
-            <button
-              key={date}
-              onClick={() => onDateChange(date)}
-              className={`px-4 py-2 rounded-md ${
-                selectedDate === date
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {new Date(date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Rest of the table remains the same... */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {/* Table content stays the same */}
-        {/* Inventory Table */}
+      {/* Inventory Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredData.length === 0 ? (
           <div className="px-6 py-8 text-center text-gray-500">
             <div className="text-lg font-medium">
               {searchTerm || statusFilter !== 'all' 
-                ? 'No matching inventory items found' 
-                : 'No inventory data available'
+                ? 'No matching items found' 
+                : 'No demand data available'
               }
             </div>
             <p className="text-sm">
               {searchTerm || statusFilter !== 'all'
                 ? 'Try adjusting your search or filter criteria'
-                : 'Inventory will appear when customers subscribe to products'
+                : 'Demand will appear when customers subscribe to products'
               }
             </p>
           </div>
@@ -254,14 +305,12 @@ getTodayString, // ✅ Use prop
                     Product
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ordered Qty
+                    Total Demand
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Received Qty
-                  </th>
-                  {/* ✅ REMOVED: Distributed Qty Column */}
+Morning Stock                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Remaining Qty
+                    Remaining After Delivery
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Value
@@ -277,10 +326,10 @@ getTodayString, // ✅ Use prop
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredData.map((item) => {
                   const status = getStatus(item);
-                  const totalValue = item.totalOrderedQuantity * Number(item.product.currentProductPrice);
+                  const totalValue = item.totalDemand * Number(item.product.currentProductPrice);
                   
                   return (
-                    <tr key={item.inventoryId} className="hover:bg-gray-50 transition-colors">
+                    <tr key={item.productId} className="hover:bg-gray-50 transition-colors">
                       {/* Product Details */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -305,10 +354,10 @@ getTodayString, // ✅ Use prop
                         </div>
                       </td>
 
-                      {/* Ordered Quantity */}
+                      {/* Total Demand */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {item.totalOrderedQuantity}
+                          {item.totalDemand}
                         </div>
                         <div className="text-xs text-gray-500">
                           Customer demand
@@ -320,7 +369,7 @@ getTodayString, // ✅ Use prop
                         <input
                           type="text"
                           inputMode="numeric"
-                          value={editingReceived[item.productId] ?? (item.receivedQuantity || '')}
+                          value={editingReceived[item.productId] ?? (item.receivedQuantity?.toString() || '')}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (/^\d*$/.test(value)) {
@@ -349,12 +398,16 @@ getTodayString, // ✅ Use prop
                         />
                       </td>
 
-                      {/* ✅ UPDATED: Remaining Quantity (Editable - End of Day Input) */}
+                      {/* Remaining Quantity (Editable) */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="text"
                           inputMode="numeric"
-                          value={editingRemaining[item.productId] ?? (item.remainingQuantity || '')}
+                          value={editingRemaining[item.productId] ?? (
+                            item.remainingQuantity !== undefined && item.remainingQuantity !== null 
+                              ? item.remainingQuantity.toString() 
+                              : ''
+                          )}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (/^\d*$/.test(value)) {
@@ -417,7 +470,6 @@ getTodayString, // ✅ Use prop
           </div>
         )}
       </div>
-      </div>
     </div>
   );
-};
+}

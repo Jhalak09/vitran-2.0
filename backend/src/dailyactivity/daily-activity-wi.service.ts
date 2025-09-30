@@ -46,8 +46,8 @@ export interface WorkerInventoryActivity {
 
 
 @Injectable()
-export class DailyActivityService {
-  private readonly logger = new Logger(DailyActivityService.name);
+export class DailyActivityServiceWi {
+  private readonly logger = new Logger(DailyActivityServiceWi.name);
 
   constructor(private prisma: PrismaService) {}
 
@@ -312,7 +312,6 @@ export class DailyActivityService {
             ...activity,
             inventory: inventory ? {
               inventoryId: inventory.inventoryId,
-              totalOrderedQuantity: inventory.totalOrderedQuantity,
               receivedQuantity: inventory.receivedQuantity,
               product: {
                 productId: inventory.product.productId,

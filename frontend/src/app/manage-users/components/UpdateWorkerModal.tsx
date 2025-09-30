@@ -214,7 +214,7 @@ export default function UpdateWorkerModal({ worker, isOpen, onClose, onWorkerUpd
             type="password"
             placeholder="New Password (leave empty to keep current)"
             value={updateForm.password}
-            minLength={6}
+            minLength={4}
             onChange={(e) => setUpdateForm(prev => ({ ...prev, password: e.target.value }))}
             style={{
               padding: '12px 16px',
