@@ -48,6 +48,7 @@ model Customer {
   customerProducts CustomerProduct[]
   customerInventories CustomerInventory[]
   paymentReceived  PaymentReceived[]
+  bills               Bill[]
 }
 
 model Worker {
@@ -203,20 +204,39 @@ model CashInHand {
 }
 
 model VerifiedDelivery {
-  verificationId  Int      
-  workerId        Int
-  customerId      Int
-  inventoryId     Int
-  productName     String
+  verificationId    Int      
+  workerId          Int
+  customerId        Int
+  inventoryId       Int
+  productName       String
   deliveredQuantity Int
-  bill            Decimal  @db.Decimal(10,2)
-  isCollected     Boolean
-  verifiedAt      DateTime @default(now())
-  verifiedBy      String
+  bill              Decimal  @db.Decimal(10,2)
+  isCollected       Boolean
+  billed            Boolean  @default(false) // Add this field
+  verifiedAt        DateTime @default(now())
+  verifiedBy        String
 
-    @@id([verificationId, workerId, customerId, inventoryId]) // Composite primary key
-  @@unique([workerId, customerId, inventoryId, verificationId]) // Prevent duplicates
+  @@id([verificationId, workerId, customerId, inventoryId])
+  @@unique([workerId, customerId, inventoryId, verificationId])
 }
+
+// Add new Bill model
+model Bill {
+  billId        Int      @id @default(autoincrement())
+  billNumber    String   @unique // Auto-generated bill number
+  customerId    Int
+  startDate     DateTime
+  endDate       DateTime
+  totalAmount   Decimal  @db.Decimal(10,2)
+  deliveryCharges Decimal? @db.Decimal(10,2)
+  isPaid        Boolean  @default(false)
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+  createdBy     String
+  
+  // Relations
+  customer      Customer @relation(fields: [customerId], references: [customerId])
+} 
 
 model deliverycharge{
   id              Int @id @default(autoincrement())
