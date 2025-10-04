@@ -1,4 +1,4 @@
-    {
+{
   "name": "vitran",
   "private": true,
   "workspaces": [
@@ -7,9 +7,14 @@
   ],
   "scripts": {
     "start:backend": "npm --workspace=backend run start",
-    "start:frontend": "npm --workspace=frontend run dev"
+    "start:frontend": "npm --workspace=frontend run dev",
+    "dev:seed": "npx dotenv-cli -e backend/.env -- npx prisma migrate reset --force && psql -h localhost -U postgres -d vitran_db -f prisma/demo-data.sql && npm run start:frontend"
   },
   "devDependencies": {
+    "dotenv-cli": "^7.4.2",
     "typescript": "^5.0.2"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0"
   }
 }

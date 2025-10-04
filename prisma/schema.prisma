@@ -33,7 +33,7 @@ model Customer {
   customerId     Int                    @id @default(autoincrement())
   firstName      String
   lastName       String?
-  address1       String
+  address1       String?
   address2       String?
   phoneNumber    String?                 @unique
   role           UserRole               @default(CUSTOMER)
@@ -53,7 +53,7 @@ model Customer {
 model Worker {
   workerId    Int      @id @default(autoincrement())
   firstName   String
-  lastName    String
+  lastName    String?
   role        UserRole @default(WORKER)
   isActive    Boolean  @default(true)
   phoneNumber String   @unique
