@@ -9,6 +9,8 @@ import { ProductModule } from './products/product.module';
 import { RelationModule } from './relation/relation.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { DailyActivityModule } from './dailyactivity/daily-activity.module';
+import { BillModule } from './bill/bill.module';
+import { TwilioModule } from './twilio/twilio.module';
 
 @Module({
   imports: [
@@ -19,7 +21,8 @@ import { DailyActivityModule } from './dailyactivity/daily-activity.module';
     UsersModule, 
     PrismaModule,
     WorkersModule,
-    CustomerModule,ProductModule, RelationModule, InventoryModule, DailyActivityModule
+    CustomerModule,ProductModule, RelationModule, InventoryModule, DailyActivityModule,
+    BillModule, TwilioModule
   ],
 })
 export class AppModule {}

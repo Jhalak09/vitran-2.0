@@ -1,6 +1,8 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { EnglishSearchBar } from '@/components/ReusableSearchBar'; // ✅ Import English SearchBar
 import { Product, Store, productApi } from './product';
 
 interface ProductsTableProps {
@@ -11,30 +13,50 @@ interface ProductsTableProps {
 }
 
 export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, onDelete, onRefresh }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); // ✅ Same state variable
   const [storeFilter, setStoreFilter] = useState<'ALL' | Store>('ALL');
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const productsPerPage = 20; // Handle large datasets with pagination
+  const [productsPerPage] = useState(20);
 
-  // Memoized filtered products for performance with large datasets
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const matchesSearch = product.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.productId.toString().includes(searchQuery);
-      const matchesStore = storeFilter === 'ALL' || product.storeId === storeFilter;
-      return matchesSearch && matchesStore;
-    });
-  }, [products, searchQuery, storeFilter]);
+  // ✅ Keep your existing filter logic - works perfectly
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = !searchQuery || 
+      product.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.productId.toString().includes(searchQuery);
+    
+    const matchesStore = storeFilter === 'ALL' || product.storeId === storeFilter;
+    
+    return matchesSearch && matchesStore;
+  });
 
-  // Paginated products for large datasets
-  const paginatedProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * productsPerPage;
-    return filteredProducts.slice(startIndex, startIndex + productsPerPage);
-  }, [filteredProducts, currentPage, productsPerPage]);
-
+  // Enhanced pagination logic
   const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+  const startIndex = (currentPage - 1) * productsPerPage;
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + productsPerPage);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, storeFilter]);
+
+  const handleDelete = async (product: Product) => {
+    if (!confirm(`Are you sure you want to delete "${product.productName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await productApi.deleteProduct(product.productId);
+      if (response.success) {
+        toast.success('Product deleted successfully');
+        onDelete(product);
+      } else {
+        toast.error(response.message || 'Failed to delete product');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete product');
+    }
+  };
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -44,213 +66,260 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
     }).format(price);
   };
 
+  const getPriceChangeIndicator = (currentPrice: number, lastPrice?: number) => {
+    if (!lastPrice) return null;
+    
+    const isIncrease = currentPrice > lastPrice;
+    const isDecrease = currentPrice < lastPrice;
+    
+    if (isIncrease) {
+      return <span className="text-green-600 text-xs ml-1">↗</span>;
+    } else if (isDecrease) {
+      return <span className="text-red-600 text-xs ml-1">↘</span>;
+    }
+    return <span className="text-gray-600 text-xs ml-1">→</span>;
+  };
+
   const getStoreBadge = (store: Store) => {
     const colors = {
-      SANCHI: 'bg-green-100 text-green-800 border-green-200',
-      SABORO: 'bg-blue-100 text-blue-800 border-blue-200',
+      [Store.SANCHI]: 'bg-blue-100 text-blue-800',
+      [Store.SABORO]: 'bg-purple-100 text-purple-800'
     };
-
+    
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${colors[store]}`}>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[store]}`}>
         {store}
       </span>
     );
   };
 
-  const getPriceChangeIndicator = (currentPrice: number, lastPrice?: number) => {
-    if (!lastPrice) return null;
-    
-    const change = currentPrice - lastPrice;
-    const isIncrease = change > 0;
-    const isDecrease = change < 0;
+  // Enhanced pagination component
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
 
-    if (isIncrease) {
-      return <span className="text-green-600 text-xs font-medium">↗ +{formatPrice(change)}</span>;
-    } else if (isDecrease) {
-      return <span className="text-red-600 text-xs font-medium">↘ {formatPrice(change)}</span>;
-    }
-    return <span className="text-gray-500 text-xs">→ No change</span>;
-  };
+    const pages: (number | string)[] = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
-  const handleDelete = async (product: Product) => {
-    if (!confirm(`Are you sure you want to delete "${product.productName}"?`)) {
-      return;
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
 
-    setDeletingId(product.productId);
-    try {
-      const response = await productApi.deleteProduct(product.productId);
-      if (response.success) {
-        toast.success('Product deleted successfully');
-        onDelete(product);
-        // Reset to first page if current page becomes empty
-        if (paginatedProducts.length === 1 && currentPage > 1) {
-          setCurrentPage(currentPage - 1);
-        }
-      } else {
-        toast.error(response.message);
+    // Add first page if not visible
+    if (startPage > 1) {
+      pages.push(1);
+      if (startPage > 2) {
+        pages.push('...');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete product');
-    } finally {
-      setDeletingId(null);
     }
-  };
 
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1); // Reset to first page on new search
-  };
+    // Add visible pages
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
 
-  const handleStoreFilter = (value: 'ALL' | Store) => {
-    setStoreFilter(value);
-    setCurrentPage(1); // Reset to first page on new filter
+    // Add last page if not visible
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        pages.push('...');
+      }
+      pages.push(totalPages);
+    }
+
+    return (
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
+        <div className="flex items-center text-sm text-gray-700">
+          <span>
+            Showing {startIndex + 1} to {Math.min(startIndex + productsPerPage, filteredProducts.length)} of {filteredProducts.length} products
+          </span>
+          {searchQuery && (
+            <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+              Search: "{searchQuery}"
+            </span>
+          )}
+          {storeFilter !== 'ALL' && (
+            <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
+              Store: {storeFilter}
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            Previous
+          </button>
+          
+          {pages.map((page, index) => (
+            <button
+              key={index}
+              onClick={() => typeof page === 'number' && setCurrentPage(page)}
+              disabled={page === '...'}
+              className={`px-3 py-1 border rounded-md text-sm transition-colors ${
+                currentPage === page
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : page === '...'
+                  ? 'border-transparent cursor-default'
+                  : 'border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Header with Search and Filters */}
-      <div className="p-4 sm:p-6 bg-gray-50 border-b border-gray-200">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+      {/* Header with search and filters */}
+      <div className="p-6 bg-gray-50 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
-            Products ({filteredProducts.length}{products.length !== filteredProducts.length ? ` of ${products.length}` : ''})
+            Products ({filteredProducts.length})
           </h2>
-        </div>
-        
-        <div className="flex flex-col lg:flex-row lg:items-center space-y-3 lg:space-y-0 lg:space-x-3">
-          <div className="flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search by name, description, or ID..."
+          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
+            {/* ✅ REPLACED: Complex search input with simple reusable English SearchBar */}
+            <EnglishSearchBar
               value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={setSearchQuery}
+              placeholder="Search products..."
+              width="250px"
             />
+            
+            {/* Store filter */}
+            <select
+              value={storeFilter}
+              onChange={(e) => setStoreFilter(e.target.value as 'ALL' | Store)}
+              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              style={{ minWidth: '120px' }}
+            >
+              <option value="ALL">All Stores</option>
+              <option value={Store.SANCHI}>SANCHI</option>
+              <option value={Store.SABORO}>SABORO</option>
+            </select>
+            
+            {/* Clear filters */}
+            {(searchQuery || storeFilter !== 'ALL') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setStoreFilter('ALL');
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors whitespace-nowrap"
+              >
+                Clear All
+              </button>
+            )}
+            
+            <button
+              onClick={onRefresh}
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors whitespace-nowrap"
+            >
+              Refresh
+            </button>
           </div>
-          
-          <select
-            value={storeFilter}
-            onChange={(e) => handleStoreFilter(e.target.value as 'ALL' | Store)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]"
-          >
-            <option value="ALL">All Stores</option>
-            <option value={Store.SANCHI}>SANCHI</option>
-            <option value={Store.SABORO}>SABORO</option>
-          </select>
-          
-          <button
-            onClick={onRefresh}
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-          >
-            Refresh
-          </button>
         </div>
       </div>
 
-      {/* Responsive Table */}
+      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-              <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Description</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedProducts.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  {searchQuery || storeFilter !== 'ALL' ? (
-                    <div>
-                      <p className="text-lg font-medium">No products found</p>
-                      <p className="text-sm">Try adjusting your search or filter criteria</p>
+                  <div className="flex flex-col items-center">
+                    <div className="text-4xl mb-2">📦</div>
+                    <div className="text-lg font-medium">No products found</div>
+                    <div className="text-sm">
+                      {searchQuery || storeFilter !== 'ALL' 
+                        ? 'Try adjusting your search terms or filters.' 
+                        : 'Create your first product to get started.'
+                      }
                     </div>
-                  ) : (
-                    <div>
-                      <p className="text-lg font-medium">No products available</p>
-                      <p className="text-sm">Create your first product to get started</p>
-                    </div>
-                  )}
+                  </div>
                 </td>
               </tr>
             ) : (
               paginatedProducts.map((product) => (
                 <tr key={product.productId} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-3 sm:px-6 py-4">
-                    <div className="flex items-center space-x-3">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
                       {product.imageUrl && (
-                        <div className="flex-shrink-0">
-                          <img
-                            className="h-16 w-16 sm:h-20 sm:w-20 rounded-lg object-cover border border-gray-200 shadow-sm"
-                            src={productApi.getImageUrl(product.imageUrl)}
-                            alt={product.productName}
-                            loading="lazy"
-                          />
-                        </div>
+                        <img
+                          className="h-12 w-12 rounded-lg object-cover mr-3 border border-gray-200"
+                          src={productApi.getImageUrl(product.imageUrl)}
+                          alt={product.productName}
+                        />
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
-                          {product.productName}
-                        </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{product.productName}</div>
                         <div className="text-sm text-gray-500">ID: {product.productId}</div>
                         {/* Show description on mobile/tablet */}
-                        {product.description && (
-                          <div className="lg:hidden text-xs text-gray-400 truncate max-w-xs mt-1">
-                            {product.description}
-                          </div>
-                        )}
+                        <div className="lg:hidden">
+                          {product.description && (
+                            <div className="text-xs text-gray-400 mt-1 truncate max-w-xs">{product.description}</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
-                  
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatPrice(product.currentProductPrice)}
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{formatPrice(product.currentProductPrice)}</div>
                     {product.lastProductPrice && (
                       <div className="text-xs text-gray-500">
                         Last: {formatPrice(product.lastProductPrice)}
+                        {getPriceChangeIndicator(product.currentProductPrice, product.lastProductPrice)}
                       </div>
                     )}
-                    <div className="mt-1">
-                      {getPriceChangeIndicator(product.currentProductPrice, product.lastProductPrice)}
-                    </div>
                   </td>
-                  
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                    {getStoreBadge(product.storeId)}
-                  </td>
-                  
+                  <td className="px-6 py-4 whitespace-nowrap">{getStoreBadge(product.storeId)}</td>
                   {/* Description column - hidden on mobile/tablet */}
-                  <td className="hidden lg:table-cell px-3 sm:px-6 py-4 max-w-xs">
-                    <div className="text-sm text-gray-900">
-                      {product.description ? (
-                        <span className="line-clamp-2" title={product.description}>
-                          {product.description}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 italic">No description</span>
-                      )}
-                    </div>
+                  <td className="px-6 py-4 hidden lg:table-cell">
+                    {product.description ? (
+                      <div className="text-sm text-gray-900 max-w-xs truncate" title={product.description}>
+                        {product.description}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">No description</span>
+                    )}
                   </td>
-                  
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex flex-col sm:flex-row sm:space-x-2 space-y-1 sm:space-y-0">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
                       <button
                         onClick={() => onEdit(product)}
-                        className="text-blue-600 hover:text-blue-900 focus:outline-none transition-colors"
+                        className="text-blue-600 hover:text-blue-900 transition-colors"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(product)}
-                        disabled={deletingId === product.productId}
-                        className="text-red-600 hover:text-red-900 focus:outline-none disabled:opacity-50 transition-colors"
+                        className="text-red-600 hover:text-red-900 transition-colors"
                       >
-                        {deletingId === product.productId ? 'Deleting...' : 'Delete'}
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -261,91 +330,8 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
         </table>
       </div>
 
-      {/* Pagination for Large Datasets */}
-      {totalPages > 1 && (
-        <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing{' '}
-                  <span className="font-medium">{((currentPage - 1) * productsPerPage) + 1}</span>
-                  {' '}to{' '}
-                  <span className="font-medium">
-                    {Math.min(currentPage * productsPerPage, filteredProducts.length)}
-                  </span>
-                  {' '}of{' '}
-                  <span className="font-medium">{filteredProducts.length}</span>
-                  {' '}results
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ←
-                  </button>
-                  
-                  {/* Page Numbers */}
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          currentPage === pageNum
-                            ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  
-                  <button
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    →
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Enhanced pagination */}
+      {renderPagination()}
     </div>
   );
 };

@@ -2,7 +2,58 @@
 
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { HindiSearchBar } from '@/components/ReusableSearchBar'; // ✅ Import reusable SearchBar
+import { HindiDropdown, createDropdownOptions, DropdownOption } from '@/components/ReusableDropdown'; // ✅ Import reusable Dropdowns
 import { WorkerCustomerRelation, Worker, Customer, relationApi } from './relation';
+
+// ✅ Enhanced search function for multi-word Hindi search
+const enhancedMultiWordSearch = (searchTerm: string, targetText: string): boolean => {
+  if (!searchTerm || !targetText) return false;
+  
+  const normalizedTarget = targetText.toLowerCase().trim();
+  const normalizedSearch = searchTerm.toLowerCase().trim();
+  
+  // Direct match (exact phrase)
+  if (normalizedTarget.includes(normalizedSearch)) return true;
+  
+  // Split search term into words for multi-word search
+  const searchWords = normalizedSearch.split(/\s+/).filter(word => word.length > 0);
+  
+  if (searchWords.length === 1) {
+    // Single word search
+    return normalizedTarget.includes(normalizedSearch);
+  }
+  
+  // Multi-word search - all words must be present (can be in any order)
+  return searchWords.every(word => normalizedTarget.includes(word));
+};
+
+// ✅ Advanced search for relation data
+const createAdvancedRelationSearch = (searchTerm: string, relation: WorkerCustomerRelation): boolean => {
+  if (!searchTerm || !relation) return false;
+  
+  const fields = [
+    // Worker fields
+    relation.worker.firstName || '',
+    relation.worker.lastName || '',
+    relation.worker.phoneNumber || '',
+    `${relation.worker.firstName || ''} ${relation.worker.lastName || ''}`.trim(),
+    
+    // Customer fields
+    relation.customer.firstName || '',
+    relation.customer.lastName || '',
+    relation.customer.phoneNumber || '',
+    relation.customer.city || '',
+    relation.customer.classification || '',
+    `${relation.customer.firstName || ''} ${relation.customer.lastName || ''}`.trim(),
+    
+    // Combined fields
+    `${relation.worker.firstName || ''} ${relation.worker.lastName || ''} ${relation.customer.firstName || ''} ${relation.customer.lastName || ''}`.trim()
+  ];
+  
+  // Search in each field
+  return fields.some(field => enhancedMultiWordSearch(searchTerm, field));
+};
 
 interface WorkerCustomerRelationsProps {
   relations: WorkerCustomerRelation[];
@@ -21,9 +72,11 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
   const [sequenceNumber, setSequenceNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Search and filter states
+  // ✅ Enhanced search and pagination states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'ended'>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -60,6 +113,31 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
 
     setAvailableCustomers(filtered);
   }, [selectedWorker, customers, relations]);
+
+  // ✅ Enhanced multi-word search with pagination
+  const filteredRelations = relations.filter((relation) => {
+    if (!relation) return false;
+
+    // Use advanced search that handles multi-word Hindi
+    const searchMatch = !searchTerm.trim() || createAdvancedRelationSearch(searchTerm, relation);
+    
+    // Status filter
+    let statusMatch = true;
+    if (statusFilter === 'active') statusMatch = !relation.thruDate;
+    if (statusFilter === 'ended') statusMatch = !!relation.thruDate;
+    
+    return searchMatch && statusMatch;
+  });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredRelations.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedRelations = filteredRelations.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   const assignCustomer = async () => {
     if (!selectedWorker || !selectedCustomer || !sequenceNumber) {
@@ -106,62 +184,149 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
     setSequenceNumber(null);
   };
 
-  // Filter relations for display
-  const filteredRelations = relations.filter((relation) => {
-    const matchesSearch =
-      !searchTerm ||
-      relation.worker.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.worker.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.customer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relation.customer.lastName.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (statusFilter === 'active') return matchesSearch && !relation.thruDate;
-    if (statusFilter === 'ended') return matchesSearch && !!relation.thruDate;
-    return matchesSearch;
-  });
+  // ✅ Create dropdown options for workers and customers
+  const workerOptions = createDropdownOptions(
+    workers,
+    (worker) => `${worker.firstName} ${worker.lastName}`, // Label
+    (worker) => worker.workerId, // ID
+    (worker) => worker.phoneNumber, // Subtitle
+    (worker) => [worker.isActive ? 'Active' : 'Inactive'] // Details
+  );
+
+  const customerOptions = createDropdownOptions(
+    availableCustomers,
+    (customer) => `${customer.firstName} ${customer.lastName}`, // Label
+    (customer) => customer.customerId, // ID
+    (customer) => customer.phoneNumber, // Subtitle
+    (customer) => [customer.city, customer.classification] // Details
+  );
+
+  // Enhanced pagination component
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    const pages: (number | string)[] = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    // Add first page if not visible
+    if (startPage > 1) {
+      pages.push(1);
+      if (startPage > 2) {
+        pages.push('...');
+      }
+    }
+
+    // Add visible pages
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    // Add last page if not visible
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        pages.push('...');
+      }
+      pages.push(totalPages);
+    }
+
+    return (
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
+        <div className="flex items-center text-sm text-gray-700">
+          <span>
+            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredRelations.length)} of {filteredRelations.length} relations
+          </span>
+          {searchTerm && (
+            <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+              Search: "{searchTerm}"
+            </span>
+          )}
+          {statusFilter !== 'all' && (
+            <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
+              Filter: {statusFilter}
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            Previous
+          </button>
+          
+          {pages.map((page, index) => (
+            <button
+              key={index}
+              onClick={() => typeof page === 'number' && setCurrentPage(page)}
+              disabled={page === '...'}
+              className={`px-3 py-1 border rounded-md text-sm transition-colors ${
+                currentPage === page
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : page === '...'
+                  ? 'border-transparent cursor-default'
+                  : 'border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
-      {/* Assignment Form */}
+      {/* ✅ UPDATED: Assignment Form with Hindi Dropdowns */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         <h2 className="text-xl font-semibold mb-6">Assign Customer to Worker</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Worker
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedWorker ?? ''}
-              onChange={e => setSelectedWorker(Number(e.target.value))}
-            >
-              <option value="">Choose a worker...</option>
-              {workers.map(w => (
-                <option key={w.workerId} value={w.workerId}>
-                  {w.firstName} {w.lastName}
-                </option>
-              ))}
-            </select>
+            {/* ✅ REPLACED: Complex select with Hindi Dropdown for Worker */}
+            <HindiDropdown
+              label="Select Worker"
+              options={workerOptions}
+              selectedValue={selectedWorker}
+              onSelect={(option: DropdownOption<Worker> | null) => 
+                setSelectedWorker(option ? option.value.workerId : null)
+              }
+              placeholder="Choose a worker..."
+              emptyMessage="No workers found"
+              allowClear={true}
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Customer
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedCustomer ?? ''}
-              onChange={e => setSelectedCustomer(Number(e.target.value))}
+            {/* ✅ REPLACED: Complex select with Hindi Dropdown for Customer */}
+            <HindiDropdown
+              label="Select Customer"
+              options={customerOptions}
+              selectedValue={selectedCustomer}
+              onSelect={(option: DropdownOption<Customer> | null) => 
+                setSelectedCustomer(option ? option.value.customerId : null)
+              }
+              placeholder="Choose a customer..."
               disabled={!selectedWorker}
-            >
-              <option value="">Choose a customer...</option>
-              {availableCustomers.map(c => (
-                <option key={c.customerId} value={c.customerId}>
-                  {c.firstName} {c.lastName}
-                </option>
-              ))}
-            </select>
+              emptyMessage="No customers available"
+              allowClear={true}
+            />
           </div>
 
           <div>
@@ -184,7 +349,7 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
               disabled={loading || !selectedWorker || !selectedCustomer || !sequenceNumber}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Assign Customer
+              {loading ? 'Assigning...' : 'Assign Customer'}
             </button>
             <button
               onClick={clearForm}
@@ -196,35 +361,51 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
         </div>
       </div>
 
-      {/* Search and Filter */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <h3 className="text-lg font-semibold">Worker Customer Relations ({filteredRelations.length})</h3>
+      {/* ✅ UPDATED: Search Bar using Reusable Component */}
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 sm:mb-0">
+            Worker Customer Relations ({filteredRelations.length})
+          </h3>
           
-          <div className="flex gap-4">
-            <input
-              type="text"
+          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
+            {/* ✅ REPLACED: Complex ReactTransliterate with Hindi SearchBar */}
+            <HindiSearchBar
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Search customers, workers..."
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={setSearchTerm}
+              placeholder="Search workers, customers..."
+              width="250px"
             />
             
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'ended')}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              style={{ minWidth: '140px' }}
             >
               <option value="all">All Relations</option>
               <option value="active">Active</option>
               <option value="ended">Ended</option>
             </select>
+
+            {/* Clear filters */}
+            {(searchTerm || statusFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors whitespace-nowrap"
+              >
+                Clear All
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Relations Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Enhanced Relations Table with Pagination */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-md">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -253,20 +434,26 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredRelations.length === 0 ? (
+              {paginatedRelations.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    {searchTerm || statusFilter !== 'all' 
-                      ? 'Try adjusting your search or filter criteria' 
-                      : 'Create your first assignment using the form above'
-                    }
+                    <div className="flex flex-col items-center">
+                      <div className="text-4xl mb-2">🔄</div>
+                      <div className="text-lg font-medium">No relations found</div>
+                      <div className="text-sm">
+                        {searchTerm || statusFilter !== 'all' 
+                          ? 'Try adjusting your search terms or filters.' 
+                          : 'Create your first assignment using the form above.'
+                        }
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                filteredRelations.map(relation => (
+                paginatedRelations.map(relation => (
                   <tr 
                     key={relation.id} 
-                    className={`hover:bg-gray-50 ${relation.thruDate ? 'opacity-60' : ''}`}
+                    className={`hover:bg-gray-50 transition-colors ${relation.thruDate ? 'opacity-60' : ''}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -321,7 +508,7 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
                       {!relation.thruDate && (
                         <button 
                           onClick={() => removeCustomer(relation.workerId, relation.customerId)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 hover:text-red-900 transition-colors"
                         >
                           Remove
                         </button>
@@ -333,6 +520,9 @@ export const WorkerCustomerRelations: React.FC<WorkerCustomerRelationsProps> = (
             </tbody>
           </table>
         </div>
+
+        {/* Enhanced pagination */}
+        {renderPagination()}
       </div>
     </div>
   );

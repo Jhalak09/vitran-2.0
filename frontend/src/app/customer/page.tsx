@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { toast, Toaster } from 'react-hot-toast';
 import { Customer, customerApi } from './customer';
 import { CustomerForm, CustomersTable } from './CustomerComponents';
+import { useRouter } from 'next/navigation';
 
 type ViewMode = 'list' | 'create' | 'edit';
 
@@ -11,6 +12,7 @@ export default function CustomerManagementPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+  const router = useRouter();
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -49,27 +51,126 @@ export default function CustomerManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header style={{
+        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
+        padding: '20px 40px',
+        boxShadow: '0 8px 32px rgba(30, 64, 175, 0.3)',
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '1400px',
+          margin: '0 auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
+            <button
+              onClick={() => router.replace('/dashboard')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+            >
+              ← Dashboard
+            </button>
+
+            <h1 style={{
+              fontSize: '1.8rem',
+              fontWeight: '800',
+              color: 'white',
+              margin: 0,
+              letterSpacing: '-0.02em',
+              textShadow: '0 2px 8px rgba(0,0,0,0.3)'
+            }}>
+            Customer Management          </h1>
+
+          </div>
+
+          {/* ✅ ADDED: Add New Customer button in header */}
+          {viewMode === 'list' && (
+            <button
+              onClick={handleCreateNew}
+              style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '12px',
+                color: '#1e40af',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: '600',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 1)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.1)';
+              }}
+            >
+              + Add Customer
+            </button>
+          )}
+
+          {/* ✅ ADDED: Back to List button in header for form views */}
+          {(viewMode === 'create' || viewMode === 'edit') && (
+            <button
+              onClick={handleFormCancel}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: '2px solid rgba(255, 255, 255, 0.3)',
+                padding: '10px 20px',
+                borderRadius: '12px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: '600',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+              }}
+            >
+              ← Back to List
+            </button>
+          )}
+
+        </div>
+      </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Customer Management</h1>
-              <p className="mt-2 text-gray-600">Manage your customer database</p>
-            </div>
-            {viewMode === 'list' && (
-              <button onClick={handleCreateNew}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-colors duration-200">
-                Add New Customer
-              </button>
-            )}
-            {(viewMode === 'create' || viewMode === 'edit') && (
-              <button onClick={handleFormCancel}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-md transition-colors duration-200">
-                Back to List
-              </button>
-            )}
-          </div>
+         
         </div>
 
         <div className="space-y-6">
@@ -81,28 +182,7 @@ export default function CustomerManagementPage() {
           )}
         </div>
 
-        {viewMode === 'list' && (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600">{customers.length}</div>
-                <div className="text-gray-500 mt-1">Total Customers</div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600">{customers.filter(c => c.classification === 'B2B').length}</div>
-                <div className="text-gray-500 mt-1">B2B Customers</div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600">{customers.filter(c => c.classification === 'B2C').length}</div>
-                <div className="text-gray-500 mt-1">B2C Customers</div>
-              </div>
-            </div>
-          </div>
-        )}
+        
       </div>
 
       <Toaster

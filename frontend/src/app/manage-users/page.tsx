@@ -37,10 +37,6 @@ export default function UsersPage() {
     setMenuOpen(isOpen);
   };
 
-  const handleBackToDashboard = () => {
-    router.push('/dashboard');
-  };
-
   if (!currentUser) {
     return (
       <div style={{ 
@@ -91,7 +87,7 @@ export default function UsersPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             
             <button
-              onClick={handleBackToDashboard}
+              onClick={() => router.replace('/dashboard')}
               style={{
                 background: 'rgba(255, 255, 255, 0.2)',
                 border: 'none',

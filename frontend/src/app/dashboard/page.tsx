@@ -271,11 +271,11 @@ export default function Dashboard() {
               </button>
           </div>
 
-          {/* Dashboard Cards Grid */}
+          {/* Dashboard Cards Grid - REDUCED CARD SIZE */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '24px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', // ✅ REDUCED from 300px to 250px
+            gap: '20px', // ✅ REDUCED gap from 24px to 20px
             marginTop: '40px'
           }}>
             {dashboardCards.map((card, index) => (
@@ -286,14 +286,14 @@ export default function Dashboard() {
                 onMouseLeave={() => setHoveredCard(null)}
                 style={{
                   background: 'white',
-                  borderRadius: '20px',
-                  padding: '32px',
+                  borderRadius: '16px', // ✅ REDUCED from 20px to 16px
+                  padding: '24px', // ✅ REDUCED from 32px to 24px
                   boxShadow: hoveredCard === card.id 
-                    ? '0 20px 40px rgba(59, 130, 246, 0.2)' 
-                    : '0 8px 24px rgba(0, 0, 0, 0.08)',
+                    ? '0 16px 32px rgba(59, 130, 246, 0.15)' // ✅ REDUCED shadow intensity
+                    : '0 6px 20px rgba(0, 0, 0, 0.06)', // ✅ REDUCED shadow intensity
                   cursor: 'pointer',
                   transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: hoveredCard === card.id ? 'translateY(-8px) scale(1.02)' : 'translateY(0) scale(1)',
+                  transform: hoveredCard === card.id ? 'translateY(-6px) scale(1.015)' : 'translateY(0) scale(1)', // ✅ REDUCED hover transform
                   border: hoveredCard === card.id ? '2px solid rgba(59, 130, 246, 0.2)' : '2px solid transparent',
                   position: 'relative',
                   overflow: 'hidden',
@@ -301,35 +301,35 @@ export default function Dashboard() {
                   animation: 'slideUp 0.6s ease-out forwards',
                 }}
               >
-                {/* Gradient Overlay */}
+                {/* Gradient Overlay - REDUCED SIZE */}
                 <div style={{
                   position: 'absolute',
                   top: 0,
                   right: 0,
-                  width: '100px',
-                  height: '100px',
+                  width: '80px', // ✅ REDUCED from 100px to 80px
+                  height: '80px', // ✅ REDUCED from 100px to 80px
                   background: card.color,
                   borderRadius: '50%',
-                  transform: 'translate(40px, -40px)',
+                  transform: 'translate(35px, -35px)', // ✅ ADJUSTED positioning
                   opacity: hoveredCard === card.id ? 0.1 : 0.05,
                   transition: 'opacity 0.3s ease',
                 }} />
 
                 {/* Card Content */}
                 <div style={{ position: 'relative', zIndex: 2 }}>
-                  {/* Icon */}
+                  {/* Icon - REDUCED SIZE */}
                   <div style={{
-                    fontSize: '3rem',
-                    marginBottom: '16px',
+                    fontSize: '2.5rem', // ✅ REDUCED from 3rem to 2.5rem
+                    marginBottom: '12px', // ✅ REDUCED from 16px to 12px
                     transform: hoveredCard === card.id ? 'scale(1.1)' : 'scale(1)',
                     transition: 'transform 0.3s ease',
                   }}>
                     {card.icon}
                   </div>
 
-                  {/* Title */}
+                  {/* Title - REDUCED SIZE */}
                   <h3 style={{
-                    fontSize: '1.5rem',
+                    fontSize: '1.3rem', // ✅ REDUCED from 1.5rem to 1.3rem
                     fontWeight: '700',
                     color: '#1e293b',
                     margin: '0 0 4px 0',
@@ -338,9 +338,9 @@ export default function Dashboard() {
                     {card.title}
                   </h3>
 
-                  {/* Subtitle */}
+                  {/* Subtitle - REDUCED SIZE */}
                   <p style={{
-                    fontSize: '1.125rem',
+                    fontSize: '1rem', // ✅ REDUCED from 1.125rem to 1rem
                     color: '#64748b',
                     margin: 0,
                     fontWeight: '500',
@@ -350,9 +350,9 @@ export default function Dashboard() {
 
                   {/* Hover Arrow */}
                   <div style={{
-                    marginTop: '16px',
+                    marginTop: '12px', // ✅ REDUCED from 16px to 12px
                     color: '#3b82f6',
-                    fontSize: '1.25rem',
+                    fontSize: '1.125rem', // ✅ REDUCED from 1.25rem to 1.125rem
                     opacity: hoveredCard === card.id ? 1 : 0,
                     transform: hoveredCard === card.id ? 'translateX(4px)' : 'translateX(0)',
                     transition: 'all 0.3s ease',

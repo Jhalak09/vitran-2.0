@@ -5,6 +5,8 @@ import toast, { Toaster } from 'react-hot-toast'
 import HamburgerNavigation from '../../components/HamburgerNavigation'
 import InventoryTable from './InventoryTable'
 import { inventoryApi, InventoryItem } from './inventory'
+import { useRouter } from 'next/navigation';
+
 
 interface DemandItem {
   demandId: number;
@@ -44,7 +46,7 @@ export default function InventoryPage() {
   const [combinedData, setCombinedData] = useState<CombinedInventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-
+const router = useRouter();
   const currentUserId = 'admin'
 
   const fetchCombinedData = async () => {
@@ -95,6 +97,9 @@ export default function InventoryPage() {
       setLoading(false)
     }
   }
+  const handleBackToDashboard = () => {
+    router.push('/dashboard');
+  };
 
   useEffect(() => {
     fetchCombinedData()
@@ -133,11 +138,66 @@ export default function InventoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <HamburgerNavigation />
+      {/* Header */}
+      <header style={{
+        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
+        padding: '20px 40px',
+        boxShadow: '0 8px 32px rgba(30, 64, 175, 0.3)',
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '1400px',
+          margin: '0 auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
+            <button
+              onClick={() => router.replace('/dashboard')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+            >
+              ← Dashboard
+            </button>
+
+            <h1 style={{
+              fontSize: '1.8rem',
+              fontWeight: '800',
+              color: 'white',
+              margin: 0,
+              letterSpacing: '-0.02em',
+              textShadow: '0 2px 8px rgba(0,0,0,0.3)'
+            }}>
+              Inventory Management
+            </h1>
+          </div>
+
+          
+          
+        </div>
+      </header>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
           <p className="mt-2 text-gray-600">
             Monitor and manage product inventory for {new Date().toLocaleDateString('en-IN', { 
               year: 'numeric', 

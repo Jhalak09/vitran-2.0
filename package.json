@@ -1,4 +1,4 @@
-    {
+{
   "name": "vitran",
   "private": true,
   "workspaces": [
@@ -11,5 +11,10 @@
   },
   "devDependencies": {
     "typescript": "^5.0.2"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-transliterate": "^1.1.9"
   }
 }

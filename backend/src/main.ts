@@ -22,6 +22,7 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new LoggingInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.setGlobalPrefix('api');
 
 
   // Global validation pipe
@@ -32,8 +33,8 @@ async function bootstrap() {
   }));
   
   const port = process.env.PORT;
-  await app.listen(port);
+  await app.listen(port,'0.0.0.0');
   console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`CORS enabled for: ${process.env.FRONTEND_URL}`);
+  // console.log(`CORS enabled for: ${process.env.FRONTEND_URL}`);
 }
 bootstrap();

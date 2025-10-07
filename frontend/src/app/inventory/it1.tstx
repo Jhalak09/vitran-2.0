@@ -1,9 +1,8 @@
+submit all at once 
 'use client';
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { inventoryApi } from './inventory';
-import { useRef } from "react";
-
 
 interface CombinedInventoryItem {
   productId: number;
@@ -41,8 +40,7 @@ export default function InventoryTable({
   const [submitLoading, setSubmitLoading] = useState(false); // ✅ NEW: Loading state for submit button
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'received' | 'completed'>('all');
-  const tableRef = useRef<HTMLDivElement>(null);
-
+  
   // Local state for optimistic updates
   const [localUpdates, setLocalUpdates] = useState<{[key: number]: Partial<CombinedInventoryItem>}>({});
 
@@ -97,106 +95,214 @@ export default function InventoryTable({
     return matchesSearch && matchesStatus;
   });
 
-  // ✅ UPDATED: Submit one quantity at a time function
-// ✅ ENHANCED: Submit with perfect scroll preservation
-const submitNextQuantity = async () => {
-  const updates: Array<{
+  // ✅ NEW: Submit all quantities function
+  const submitAllQuantities = async () => {
+    const updates: Array<{
     type: 'received' | 'remaining';
     productId: number;
     value: number;
   }> = [];
-  
-  // Collect all received quantity updates
-  Object.entries(editingReceived).forEach(([productId, value]) => {
-    const numValue = parseInt(value) || 0;
-    if (numValue > 0) {
+    
+    // Collect all received quantity updates
+    Object.entries(editingReceived).forEach(([productId, value]) => {
+      const numValue = parseInt(value) || 0;
+      if (numValue > 0) {
+        updates.push({
+          type: 'received',
+          productId: parseInt(productId),
+          value: numValue
+        });
+      }
+    });
+
+    // Collect all remaining quantity updates  
+    Object.entries(editingRemaining).forEach(([productId, value]) => {
+      const numValue = parseInt(value) || 0;
       updates.push({
-        type: 'received',
+        type: 'remaining',
         productId: parseInt(productId),
         value: numValue
       });
-    }
-  });
-
-  // Collect all remaining quantity updates  
-  Object.entries(editingRemaining).forEach(([productId, value]) => {
-    const numValue = parseInt(value) || 0;
-    updates.push({
-      type: 'remaining',
-      productId: parseInt(productId),
-      value: numValue
     });
-  });
 
-  if (updates.length === 0) {
-    toast.error('No quantities to submit');
-    return;
-  }
-
-  setSubmitLoading(true);
-
-  // ✅ ENHANCED: Store multiple scroll positions for better preservation
-  const preserveScrollPosition = () => {
-    return {
-      tableScroll: tableRef.current?.scrollTop || 0,
-      windowScroll: window.scrollY || 0,
-      tableElement: tableRef.current
-    };
-  };
-
-  // ✅ ENHANCED: Restore scroll positions smoothly
-  const restoreScrollPosition = (positions: any) => {
-    // Use requestAnimationFrame for smoother restoration
-    requestAnimationFrame(() => {
-      if (positions.tableElement && positions.tableScroll !== undefined) {
-        positions.tableElement.scrollTop = positions.tableScroll;
-      }
-      if (positions.windowScroll !== undefined) {
-        window.scrollTo(0, positions.windowScroll);
-      }
-    });
-  };
-
-  try {
-    const update = updates[0];
-    
-    // ✅ Preserve scroll positions before any operations
-    const scrollPositions = preserveScrollPosition();
-    
-    if (update.type === 'received') {
-      await inventoryApi.updateReceivedQuantity(update.productId, update.value, currentUserId);
-      setEditingReceived(prev => {
-        const newState = { ...prev };
-        delete newState[update.productId];
-        return newState;
-      });
-    } else {
-      await inventoryApi.updateRemainingQuantity(update.productId, update.value, currentUserId);
-      setEditingRemaining(prev => {
-        const newState = { ...prev };
-        delete newState[update.productId];
-        return newState;
-      });
+    if (updates.length === 0) {
+      toast.error('No quantities to submit');
+      return;
     }
 
-    toast.success(`Successfully updated 1 quantity. ${updates.length - 1} remaining.`);
-    
-    // ✅ ENHANCED: Smooth refresh with scroll preservation
-    await onInventoryUpdate();
-    
-    // ✅ Restore scroll position after a small delay to ensure DOM is updated
-    setTimeout(() => {
-      restoreScrollPosition(scrollPositions);
-    }, 50);
-    
-  } catch (error: any) {
-    toast.error(error.message || 'Failed to update quantity');
-  } finally {
-    setSubmitLoading(false);
-  }
-};
+    setSubmitLoading(true);
 
-  
+    try {
+      // Process all updates
+      for (const update of updates) {
+        if (update.type === 'received') {
+          await inventoryApi.updateReceivedQuantity(update.productId, update.value, currentUserId);
+        } else {
+          await inventoryApi.updateRemainingQuantity(update.productId, update.value, currentUserId);
+        }
+      }
+
+      toast.success(`Successfully updated ${updates.length} quantities`);
+      
+      // Clear editing states
+      setEditingReceived({});
+      setEditingRemaining({});
+      
+      // Refresh data
+      onInventoryUpdate();
+      
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update quantities');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const updateReceivedQuantity = async (productId: number, receivedQty: number) => {
+    if (receivedQty < 1) {
+      toast.error('Received quantity must be at least 1');
+      return;
+    }
+
+    // Optimistic update - immediately update local state
+    setLocalUpdates(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        receivedQuantity: receivedQty,
+        lastUpdated: new Date().toISOString(),
+        entryByUserLoginId: currentUserId
+      }
+    }));
+
+    // Clear editing state immediately
+    setEditingReceived(prev => {
+      const newState = { ...prev };
+      delete newState[productId];
+      return newState;
+    });
+
+    // Show loading state
+    setLoading(prev => ({ ...prev, [productId]: true }));
+
+    try {
+      const response = await inventoryApi.updateReceivedQuantity(productId, receivedQty, currentUserId);
+      if (response.success) {
+        toast.success('Received quantity updated successfully');
+        // Don't call onInventoryUpdate() to avoid refresh
+        
+        // Update local state with server response if needed
+        setLocalUpdates(prev => ({
+          ...prev,
+          [productId]: {
+            ...prev[productId],
+            receivedQuantity: receivedQty,
+            lastUpdated: new Date().toISOString(),
+            entryByUserLoginId: currentUserId
+          }
+        }));
+      } else {
+        // Revert optimistic update on error
+        setLocalUpdates(prev => {
+          const newUpdates = { ...prev };
+          if (newUpdates[productId]) {
+            delete newUpdates[productId].receivedQuantity;
+            delete newUpdates[productId].lastUpdated;
+            delete newUpdates[productId].entryByUserLoginId;
+          }
+          return newUpdates;
+        });
+        toast.error(response.message);
+      }
+    } catch (error: any) {
+      // Revert optimistic update on error
+      setLocalUpdates(prev => {
+        const newUpdates = { ...prev };
+        if (newUpdates[productId]) {
+          delete newUpdates[productId].receivedQuantity;
+          delete newUpdates[productId].lastUpdated;
+          delete newUpdates[productId].entryByUserLoginId;
+        }
+        return newUpdates;
+      });
+      toast.error(error.message || 'Failed to update received quantity');
+    } finally {
+      setLoading(prev => ({ ...prev, [productId]: false }));
+    }
+  };
+
+  const updateRemainingQuantity = async (productId: number, remainingQty: number) => {
+    if (remainingQty < 0) {
+      toast.error('Remaining quantity cannot be negative');
+      return;
+    }
+
+    // Optimistic update - immediately update local state
+    setLocalUpdates(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        remainingQuantity: remainingQty,
+        lastUpdated: new Date().toISOString(),
+        entryByUserLoginId: currentUserId
+      }
+    }));
+
+    // Clear editing state immediately
+    setEditingRemaining(prev => {
+      const newState = { ...prev };
+      delete newState[productId];
+      return newState;
+    });
+
+    // Show loading state
+    setLoading(prev => ({ ...prev, [productId]: true }));
+
+    try {
+      const response = await inventoryApi.updateRemainingQuantity(productId, remainingQty, currentUserId);
+      if (response.success) {
+        toast.success('Remaining quantity updated successfully');
+        // Don't call onInventoryUpdate() to avoid refresh
+        
+        // Update local state with server response
+        setLocalUpdates(prev => ({
+          ...prev,
+          [productId]: {
+            ...prev[productId],
+            remainingQuantity: remainingQty,
+            lastUpdated: new Date().toISOString(),
+            entryByUserLoginId: currentUserId
+          }
+        }));
+      } else {
+        // Revert optimistic update on error
+        setLocalUpdates(prev => {
+          const newUpdates = { ...prev };
+          if (newUpdates[productId]) {
+            delete newUpdates[productId].remainingQuantity;
+            delete newUpdates[productId].lastUpdated;
+            delete newUpdates[productId].entryByUserLoginId;
+          }
+          return newUpdates;
+        });
+        toast.error(response.message);
+      }
+    } catch (error: any) {
+      // Revert optimistic update on error
+      setLocalUpdates(prev => {
+        const newUpdates = { ...prev };
+        if (newUpdates[productId]) {
+          delete newUpdates[productId].remainingQuantity;
+          delete newUpdates[productId].lastUpdated;
+          delete newUpdates[productId].entryByUserLoginId;
+        }
+        return newUpdates;
+      });
+      toast.error(error.message || 'Failed to update remaining quantity');
+    } finally {
+      setLoading(prev => ({ ...prev, [productId]: false }));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -238,27 +344,27 @@ const submitNextQuantity = async () => {
         </div>
       </div>
 
-      {/* ✅ UPDATED: Submit Button Section */}
-<div className="bg-white rounded-lg shadow p-4">
-  <div className="flex items-center justify-between">
-    <div className="text-sm text-gray-600">
-      {Object.keys(editingReceived).length + Object.keys(editingRemaining).length > 0 ? (
-        <span>
-          {Object.keys(editingReceived).length + Object.keys(editingRemaining).length} quantities ready to submit (one at a time)
-        </span>
-      ) : (
-        <span>Make changes in the table below, then click submit</span>
-      )}
-    </div>
-    <button
-      onClick={submitNextQuantity} // ✅ CHANGED: Updated function name
-      disabled={submitLoading || (Object.keys(editingReceived).length + Object.keys(editingRemaining).length === 0)}
-      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
-    >
-      {submitLoading ? 'Submitting...' : 'Submit Next Quantity'} {/* ✅ CHANGED: Updated button text */}
-    </button>
-  </div>
-</div>
+      {/* ✅ NEW: Submit Button Section */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            {Object.keys(editingReceived).length + Object.keys(editingRemaining).length > 0 ? (
+              <span>
+                {Object.keys(editingReceived).length + Object.keys(editingRemaining).length} quantities ready to submit
+              </span>
+            ) : (
+              <span>Make changes in the table below, then click submit</span>
+            )}
+          </div>
+          <button
+            onClick={submitAllQuantities}
+            disabled={submitLoading || (Object.keys(editingReceived).length + Object.keys(editingRemaining).length === 0)}
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {submitLoading ? 'Submitting...' : 'Submit All Quantities'}
+          </button>
+        </div>
+      </div>
 
       {/* Inventory Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -278,7 +384,7 @@ const submitNextQuantity = async () => {
             </p>
           </div>
         ) : (
-          <div ref={tableRef} className="overflow-x-auto max-h-[600px] scroll-smooth">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>

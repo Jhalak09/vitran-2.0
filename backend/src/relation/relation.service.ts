@@ -19,7 +19,7 @@ export class RelationService {
             workerId: true,
             firstName: true,
             lastName: true,
-            phoneNumber: true,
+            phoneNumber: false,
             isActive: true,
           },
         },

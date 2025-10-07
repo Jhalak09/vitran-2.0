@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import toast, { Toaster } from 'react-hot-toast'
+import { useRouter } from 'next/navigation';
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -41,6 +43,7 @@ export default function DataVerificationPage() {
   // Unique values for filters
   const [uniqueWorkers, setUniqueWorkers] = useState<FilterOption[]>([])
   const [uniqueCustomers, setUniqueCustomers] = useState<FilterOption[]>([])
+  const router = useRouter();
 
   const fetchData = async () => {
     try {
@@ -113,6 +116,10 @@ export default function DataVerificationPage() {
     return selectedWorker === '' || cash.workerId?.toString() === selectedWorker
   })
 
+  // ✅ ADDED: Check if data is empty to prevent submission
+  const isDataEmpty = deliveries.length === 0 && cashData.length === 0
+  const isSubmitDisabled = submitting || isDataEmpty
+
   const updateDelivery = (index: number, field: keyof DeliveryData, value: any) => {
     setDeliveries(prev => prev.map((item, i) => 
       i === index ? { ...item, [field]: value } : item
@@ -131,6 +138,12 @@ export default function DataVerificationPage() {
   }
 
   const submitVerification = async () => {
+    // ✅ ADDED: Prevent submission if data is empty
+    if (isDataEmpty) {
+      toast.error('No data available to verify. Please ensure there are deliveries or cash records to submit.')
+      return
+    }
+
     try {
       setSubmitting(true)
       
@@ -178,13 +191,97 @@ export default function DataVerificationPage() {
   }
 
   return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+<header
+  style={{
+    background:
+      'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
+    padding: '20px 40px',
+    boxShadow: '0 8px 32px rgba(30, 64, 175, 0.3)',
+    position: 'relative',
+    zIndex: 1,
+  }}
+>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between', // left & right alignment
+      alignItems: 'center',
+      maxWidth: '1400px',
+      margin: '0 auto',
+    }}
+  >
+    {/* LEFT SIDE: Button + Title */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <button
+        onClick={() => router.replace('/dashboard')}
+        style={{
+          background: 'rgba(255, 255, 255, 0.2)',
+          border: 'none',
+          padding: '8px 16px',
+          borderRadius: '8px',
+          color: 'white',
+          cursor: 'pointer',
+          fontSize: '0.9rem',
+          fontWeight: '500',
+          backdropFilter: 'blur(10px)',
+          transition: 'all 0.3s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+        }}
+      >
+        ← Dashboard
+      </button>
+
+      <h1
+        style={{
+          fontSize: '1.8rem',
+          fontWeight: '800',
+          color: 'white',
+          margin: 0,
+          letterSpacing: '-0.02em',
+          textShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}
+      >
+        Data Verification
+      </h1>
+    </div>
+
+    {/* RIGHT SIDE: Delivery & Cash Info */}
+    <div
+      style={{
+        fontSize: '0.9rem',
+        color: 'rgba(255,255,255,0.85)',
+        fontWeight: '500',
+      }}
+    >
+      Showing {filteredDeliveries.length} deliveries, {filteredCashData.length}{' '}
+      cash records
+    </div>
+  </div>
+</header>
+
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Data Verification</h1>
-        <div className="text-sm text-gray-600">
-          Showing {filteredDeliveries.length} deliveries, {filteredCashData.length} cash records
+        
+      
+
+      {/* ✅ ADDED: Alert when no data is available */}
+      {isDataEmpty && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="text-yellow-400 mr-3">⚠️</div>
+            <div>
+              <h3 className="text-sm font-medium text-yellow-800">No Data Available</h3>
+              <p className="text-sm text-yellow-700">There are no deliveries or cash records to verify at this time.</p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Filters Section */}
       <div className="bg-white rounded-lg shadow p-4">
@@ -371,14 +468,21 @@ export default function DataVerificationPage() {
       <div className="flex justify-end">
         <button
           onClick={submitVerification}
-          disabled={submitting}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          disabled={isSubmitDisabled} // ✅ UPDATED: Now disabled when data is empty
+          className={`px-6 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
+            isSubmitDisabled 
+              ? 'bg-gray-400 cursor-not-allowed text-gray-200' // ✅ UPDATED: Better disabled styling
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          }`}
         >
           {submitting ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               Submitting...
             </>
+          ) : isDataEmpty ? (
+            // ✅ ADDED: Different text when data is empty
+            'No Data to Verify'
           ) : (
             'Complete Verification'
           )}
@@ -386,6 +490,7 @@ export default function DataVerificationPage() {
       </div>
 
       <Toaster />
+    </div>
     </div>
   )
 }

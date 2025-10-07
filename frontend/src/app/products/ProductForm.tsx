@@ -1,4 +1,5 @@
 'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { Product, CreateProductDto, Store, productApi } from './product';
@@ -13,8 +14,8 @@ interface ProductFormProps {
 export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel, isEdit = false }) => {
   const [formData, setFormData] = useState<CreateProductDto>({
     productName: '',
-    currentProductPrice: 0,
-    lastProductPrice: 0,
+    currentProductPrice: 1, // ✅ FIXED: Start with 1 instead of 0
+    lastProductPrice: undefined, // ✅ FIXED: Use undefined instead of empty string
     imageUrl: '',
     description: '',
     storeId: Store.SANCHI,
@@ -22,7 +23,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
   const [loading, setLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [previewImage, setPreviewImage] = useState<string>('');
+  const [previewImage, setPreviewImage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
       setFormData({
         productName: product.productName,
         currentProductPrice: product.currentProductPrice,
-        lastProductPrice: product.lastProductPrice || 0,
+        lastProductPrice: product.lastProductPrice || undefined, // ✅ FIXED: Use undefined for empty lastProductPrice
         imageUrl: product.imageUrl || '',
         description: product.description || '',
         storeId: product.storeId,
@@ -43,8 +44,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
     const newErrors: Record<string, string> = {};
     if (!formData.productName.trim()) newErrors.productName = 'Product name is required';
     if (formData.currentProductPrice <= 0) newErrors.currentProductPrice = 'Current price must be greater than 0';
-    if (formData.lastProductPrice && formData.lastProductPrice < 0) newErrors.lastProductPrice = 'Last price cannot be negative';
-    
+    if (formData.lastProductPrice !== undefined && formData.lastProductPrice < 0) {
+      newErrors.lastProductPrice = 'Last price cannot be negative';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -58,11 +60,21 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
 
     setLoading(true);
     try {
+      // ✅ FIXED: Prepare data with proper lastProductPrice handling
+      const submitData: CreateProductDto = {
+        ...formData,
+        // Only include lastProductPrice if it has a valid value
+        ...(formData.lastProductPrice !== undefined && formData.lastProductPrice > 0 
+          ? { lastProductPrice: formData.lastProductPrice } 
+          : {}
+        )
+      };
+
       let response;
       if (isEdit && product) {
-        response = await productApi.updateProduct(product.productId, formData);
+        response = await productApi.updateProduct(product.productId, submitData);
       } else {
-        response = await productApi.createProduct(formData);
+        response = await productApi.createProduct(submitData);
       }
 
       if (response.success) {
@@ -80,11 +92,18 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ 
-      ...prev, 
-      [name]: name.includes('Price') ? parseFloat(value) || 0 : value 
-    }));
     
+    // ✅ FIXED: Better price handling
+    if (name === 'currentProductPrice') {
+      const numValue = parseInt(value) || 1; // Parse as integer, default to 1
+      setFormData(prev => ({ ...prev, [name]: numValue }));
+    } else if (name === 'lastProductPrice') {
+      const numValue = value === '' ? undefined : (parseInt(value) || undefined); // ✅ FIXED: undefined for empty
+      setFormData(prev => ({ ...prev, [name]: numValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -109,13 +128,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
     setImageUploading(true);
     try {
       const response = await productApi.uploadImage(file);
-      
-      // ✅ FIXED: Proper type checking and handling
       if (response.success && response.data) {
-        // Type guard to ensure we have the right data structure
         if (typeof response.data === 'object' && 'imageUrl' in response.data) {
-          const imageUrl = response.data.imageUrl as string; // Safe type assertion
-          
+          const imageUrl = response.data.imageUrl as string;
           if (imageUrl && typeof imageUrl === 'string') {
             setFormData(prev => ({ ...prev, imageUrl }));
             setPreviewImage(productApi.getImageUrl(imageUrl));
@@ -150,9 +165,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
         {isEdit ? 'Edit Product' : 'Add New Product'}
       </h2>
       
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Product Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Product Name *
+          </label>
           <input
             type="text"
             name="productName"
@@ -163,47 +181,63 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
             }`}
             placeholder="Enter product name"
           />
-          {errors.productName && <p className="text-red-500 text-sm mt-1">{errors.productName}</p>}
+          {errors.productName && (
+            <p className="text-red-500 text-sm mt-1">{errors.productName}</p>
+          )}
         </div>
 
+        {/* Price Fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Current Price */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Current Price *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Current Price (₹) *
+            </label>
             <input
               type="number"
               name="currentProductPrice"
               value={formData.currentProductPrice}
               onChange={handleInputChange}
-              step="0.01"
-              min="0"
+              min="1"
+              step="1" // ✅ FIXED: Step by 1 rupee instead of 0.01
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.currentProductPrice ? 'border-red-500' : 'border-gray-300'
               }`}
-              placeholder="0.00"
+              placeholder="Enter current price"
             />
-            {errors.currentProductPrice && <p className="text-red-500 text-sm mt-1">{errors.currentProductPrice}</p>}
+            {errors.currentProductPrice && (
+              <p className="text-red-500 text-sm mt-1">{errors.currentProductPrice}</p>
+            )}
           </div>
 
+          {/* Last Price */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Last Price (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Last Price (₹) <span className="text-gray-500">(Optional)</span>
+            </label>
             <input
               type="number"
               name="lastProductPrice"
-              value={formData.lastProductPrice || ''}
+              value={formData.lastProductPrice || ''} // ✅ FIXED: Show empty string when undefined
               onChange={handleInputChange}
-              step="0.01"
               min="0"
+              step="1" // ✅ FIXED: Step by 1 rupee instead of 0.01
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.lastProductPrice ? 'border-red-500' : 'border-gray-300'
               }`}
-              placeholder="0.00"
+              placeholder="Enter last price (leave blank if none)"
             />
-            {errors.lastProductPrice && <p className="text-red-500 text-sm mt-1">{errors.lastProductPrice}</p>}
+            {errors.lastProductPrice && (
+              <p className="text-red-500 text-sm mt-1">{errors.lastProductPrice}</p>
+            )}
           </div>
         </div>
 
+        {/* Store Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Store *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Store *
+          </label>
           <select
             name="storeId"
             value={formData.storeId}
@@ -215,8 +249,11 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
           </select>
         </div>
 
+        {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description <span className="text-gray-500">(Optional)</span>
+          </label>
           <textarea
             name="description"
             value={formData.description}
@@ -227,60 +264,66 @@ export const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, on
           />
         </div>
 
+        {/* Image Upload */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
-          <div className="space-y-4">
-            {previewImage && (
-              <div className="relative inline-block">
-                <img
-                  src={previewImage}
-                  alt="Product preview"
-                  className="w-32 h-32 object-cover rounded-lg border border-gray-300"
-                />
-                <button
-                  type="button"
-                  onClick={removeImage}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-                id="image-upload"
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Product Image
+          </label>
+          
+          {previewImage && (
+            <div className="mb-4 relative inline-block">
+              <img
+                src={previewImage}
+                alt="Product preview"
+                className="w-32 h-32 object-cover rounded-lg border border-gray-300"
               />
-              <label
-                htmlFor="image-upload"
-                className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
-                  imageUploading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
               >
-                {imageUploading ? 'Uploading...' : 'Choose Image'}
-              </label>
-              <p className="text-sm text-gray-500 mt-1">PNG, JPG, GIF up to 5MB</p>
+                ×
+              </button>
+            </div>
+          )}
+          
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+            <div className="space-y-1 text-center">
+              <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div className="flex text-sm text-gray-600">
+                <label htmlFor="image-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                  <span>{imageUploading ? 'Uploading...' : 'Choose Image'}</span>
+                  <input
+                    id="image-upload"
+                    ref={fileInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    disabled={imageUploading}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
             </div>
           </div>
         </div>
 
+        {/* Form Actions */}
         <div className="flex justify-end space-x-4 pt-6">
           <button
             type="button"
             onClick={onCancel}
-            disabled={loading || imageUploading}
+            disabled={loading}
             className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500"
           >
             Cancel
           </button>
           <button
             type="submit"
-            disabled={loading || imageUploading}
+            disabled={loading}
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Saving...' : isEdit ? 'Update Product' : 'Create Product'}

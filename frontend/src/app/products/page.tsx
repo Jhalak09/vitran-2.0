@@ -4,6 +4,7 @@ import { toast, Toaster } from 'react-hot-toast';
 import { Product, Store, productApi } from './product';
 import { ProductForm } from './ProductForm';
 import { ProductsTable } from './ProductsTable';
+import { useRouter } from 'next/navigation';
 
 type ViewMode = 'list' | 'create' | 'edit';
 
@@ -12,6 +13,7 @@ export default function ProductManagementPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedProduct, setSelectedProduct] = useState<Product | undefined>();
+  const router = useRouter();
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -52,12 +54,60 @@ export default function ProductManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
+      {/* Header */}
+      <header style={{
+        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
+        padding: '20px 40px',
+        boxShadow: '0 8px 32px rgba(30, 64, 175, 0.3)',
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '1400px',
+          margin: '0 auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
+            <button
+              onClick={() => router.replace('/dashboard')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+            >
+              ← Dashboard
+            </button>
+
+            <h1 style={{
+              fontSize: '1.8rem',
+              fontWeight: '800',
+              color: 'white',
+              margin: 0,
+              letterSpacing: '-0.02em',
+              textShadow: '0 2px 8px rgba(0,0,0,0.3)'
+            }}>
+Product Management            </h1>
+          </div>
+          <div className="w-full max-w-2xl">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
-              <p className="mt-2 text-gray-600">Manage your product inventory across stores</p>
             </div>
             {viewMode === 'list' && (
               <button onClick={handleCreateNew}
@@ -73,6 +123,12 @@ export default function ProductManagementPage() {
             )}
           </div>
         </div>
+        </div>
+        
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
 
         <div className="space-y-6">
           {viewMode === 'list' && (
@@ -84,7 +140,7 @@ export default function ProductManagementPage() {
         </div>
 
         {viewMode === 'list' && (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-10">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-center">
                 <div className="text-3xl font-bold text-blue-600">{products.length}</div>
@@ -103,12 +159,7 @@ export default function ProductManagementPage() {
                 <div className="text-gray-500 mt-1">SABORO Store</div>
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600">{products.filter(p => p.imageUrl).length}</div>
-                <div className="text-gray-500 mt-1">With Images</div>
-              </div>
-            </div>
+            
           </div>
         )}
       </div>
