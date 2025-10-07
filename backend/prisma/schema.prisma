@@ -173,7 +173,7 @@ model CustomerInventory {
   inventoryId       Int 
   date              DateTime
   deliveredQuantity Int 
-  userLogin         String 
+  workerId          Int?     //workerId
   verificationId    Int?
 
   // Relations
@@ -188,6 +188,7 @@ model PaymentReceived {
   bill         Decimal  @db.Decimal(10,2)
   isCollected  Boolean  @default(false)
   date         DateTime @default(now())
+  workerId         Int?     //workerId
 
   // Relations
   customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
