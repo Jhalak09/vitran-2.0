@@ -26,7 +26,7 @@ export class CustomerDeliveryController {
   @Roles('WORKER')
   async processDelivery(@Body() dto: ProcessDeliveryDto, @Request() req) {
     try {
-      const userLogin = req.user.phoneNumber
+      const userLogin = req.user.userId
       return await this.deliveryService.processDelivery(dto, userLogin, req.user.role)
     } catch (error) {
       return {

@@ -8,7 +8,7 @@ export class CustomerDeliveryService {
   constructor(private prisma: PrismaService) {}
 
   // Process single delivery
-async processDelivery(dto: ProcessDeliveryDto, userLogin: string, userRole: string) {
+async processDelivery(dto: ProcessDeliveryDto, workerId , userRole: string) {
   if (userRole !== 'WORKER' && userRole !== 'ADMIN') {
     throw new ForbiddenException('Only workers can process deliveries')
   }
@@ -94,7 +94,7 @@ async processDelivery(dto: ProcessDeliveryDto, userLogin: string, userRole: stri
           inventoryId,
           date: today,
           deliveredQuantity,
-          userLogin,
+          workerId,
         }
       })
 
@@ -106,6 +106,7 @@ async processDelivery(dto: ProcessDeliveryDto, userLogin: string, userRole: stri
           bill: billAmount, // ✅ Always add billAmount
           isCollected: isPaymentCollected, // ✅ true if customized, false if not
           date: today,
+            workerId,
         }
       })
 
@@ -216,65 +217,5 @@ async processDelivery(dto: ProcessDeliveryDto, userLogin: string, userRole: stri
     }
   }
 
-  // WORKER ONLY: Get my delivery confirmation
-  async getMyDeliveries(userLogin: string, date?: Date) {
-    const searchDate = date || new Date()
-    const startOfDay = new Date(searchDate.setHours(0, 0, 0, 0))
-    const endOfDay = new Date(searchDate.setHours(23, 59, 59, 999))
-
-    const deliveries = await this.prisma.customerInventory.findMany({
-      where: {
-        userLogin,
-        date: {
-          gte: startOfDay,
-          lte: endOfDay,
-        }
-      },
-      include: {
-        customer: {
-          select: {
-            firstName: true,
-            lastName: true,
-            classification: true,
-          }
-        }
-      }
-    })
-
-    // Get payment details for these deliveries
-    const customerIds = deliveries.map(d => d.customerId)
-    const payments = await this.prisma.paymentReceived.findMany({
-      where: {
-        customerId: { in: customerIds },
-        date: {
-          gte: startOfDay,
-          lte: endOfDay,
-        }
-      }
-    })
-
-    // Combine delivery and payment data
-    const deliveriesWithPayments = deliveries.map(delivery => {
-      const payment = payments.find(p => 
-        p.customerId === delivery.customerId && 
-        p.inventoryId === delivery.inventoryId
-      )
-      
-      return {
-        deliveryId: delivery.id,
-        customerName: `${delivery.customer.firstName} ${delivery.customer.lastName || ''}`.trim(),
-        deliveredQuantity: delivery.deliveredQuantity,
-        billAmount: payment?.bill || 0,
-        collectionStatus: payment?.isCollected ? 'Collected' : 'Pending',
-        deliveryDate: delivery.date,
-      }
-    })
-
-    return {
-      success: true,
-      totalDeliveries: deliveries.length,
-      totalAmount: payments.reduce((sum, p) => sum + Number(p.bill), 0),
-      data: deliveriesWithPayments,
-    }
-  }
+  
 }
