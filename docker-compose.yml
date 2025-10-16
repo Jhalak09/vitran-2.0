@@ -38,6 +38,8 @@ services:
       - ./backend/.env
     depends_on:
       - db
+    networks:
+      - web
 
   frontend:
     build: ./frontend
@@ -48,6 +50,8 @@ services:
       - ./frontend/.env
     depends_on:
       - backend
+    networks:
+      - web
 
   db:
     image: postgres:15
