@@ -20,6 +20,7 @@ export class AuthService {
     where: { email },
   });
 
+
   if (!user) {
     throw new UnauthorizedException('Invalid email or password');
   }
@@ -27,6 +28,8 @@ export class AuthService {
 
   // Generate hash for comparison (debugging purpose)
   const testHash = await bcrypt.hash(password, 12);
+  console.log('Test Hash:', testHash);
+  console.log('Stored Hash:', user.password);
 
   // Compare password
   const isPasswordValid = await bcrypt.compare(password, user.password);
