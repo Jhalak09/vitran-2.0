@@ -18,7 +18,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.6.0",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "react-transliterate": "^1.1.9"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.0.0",
