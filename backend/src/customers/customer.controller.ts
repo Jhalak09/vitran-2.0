@@ -9,6 +9,7 @@ import {
   HttpStatus,
   HttpCode,
   Query,
+  HttpException,
 } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -88,7 +89,17 @@ export class CustomerController {
         data: customer,
       };
     } catch (error) {
-      throw error;
+      // ✅ FIXED: Return proper error response
+      if (error.status) {
+        throw error; // Let NestJS handle it
+      }
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message || 'Failed to update customer',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 }

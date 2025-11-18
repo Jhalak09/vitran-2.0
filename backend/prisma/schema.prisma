@@ -167,7 +167,7 @@ model WorkerInventory {
   // Note: inventoryId references Inventory table but no direct relation defined to avoid circular dependency
 }
 
-model CustomerInventory {
+model    {
   id                Int      @id @default(autoincrement())
   customerId        Int
   inventoryId       Int 
