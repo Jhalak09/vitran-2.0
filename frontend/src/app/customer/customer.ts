@@ -47,18 +47,26 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 
 class CustomerApiService {
   private async fetchWithToast<T>(url: string, options: RequestInit = {}): Promise<T> {
-    try {
-      const response = await fetch(`${API_BASE_URL}${url}`, {
-        headers: { 'Content-Type': 'application/json', ...options.headers },
-        ...options,
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('API Error:', error);
-      throw error;
+  try {
+    const res = await fetch(`${API_BASE_URL}${url}`, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options,
+    });
+
+    // If backend sends error, extract real message
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+
+      throw new Error(err?.message || `HTTP Error ${res.status}`);
     }
+
+    return await res.json();
+  } catch (error) {
+    console.error("API Error:", error);
+    throw error;
   }
+}
+
 
   async getAllCustomers(): Promise<CustomerResponse> {
     return this.fetchWithToast<CustomerResponse>('/customers');

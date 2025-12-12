@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { EnglishSearchBar } from '@/components/ReusableSearchBar'; // ✅ Import English SearchBar
+import { EnglishSearchBar } from '@/components/ReusableSearchBar';
 import { Product, Store, productApi } from './product';
 
 interface ProductsTableProps {
@@ -13,12 +13,11 @@ interface ProductsTableProps {
 }
 
 export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, onDelete, onRefresh }) => {
-  const [searchQuery, setSearchQuery] = useState(''); // ✅ Same state variable
+  const [searchQuery, setSearchQuery] = useState('');
   const [storeFilter, setStoreFilter] = useState<'ALL' | Store>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [productsPerPage] = useState(20);
 
-  // ✅ Keep your existing filter logic - works perfectly
   const filteredProducts = products.filter(product => {
     const matchesSearch = !searchQuery || 
       product.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -30,25 +29,26 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
     return matchesSearch && matchesStore;
   });
 
-  // Enhanced pagination logic
   const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
   const startIndex = (currentPage - 1) * productsPerPage;
   const paginatedProducts = filteredProducts.slice(startIndex, startIndex + productsPerPage);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, storeFilter]);
 
   const handleDelete = async (product: Product) => {
-    if (!confirm(`Are you sure you want to delete "${product.productName}"? This action cannot be undone.`)) {
+    // ✅ ENHANCED: Better confirmation dialog with product details
+    const confirmMessage = `⚠️ DELETE PRODUCT?\n\nProduct: ${product.productName}\nID: ${product.productId}\nStore: ${product.storeId}\n\nThis action cannot be undone. Are you sure?`;
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
 
     try {
       const response = await productApi.deleteProduct(product.productId);
       if (response.success) {
-        toast.success('Product deleted successfully');
+        toast.success(`Product "${product.productName}" deleted successfully`);
         onDelete(product);
       } else {
         toast.error(response.message || 'Failed to delete product');
@@ -93,7 +93,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
     );
   };
 
-  // Enhanced pagination component
   const renderPagination = () => {
     if (totalPages <= 1) return null;
 
@@ -106,7 +105,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
 
-    // Add first page if not visible
     if (startPage > 1) {
       pages.push(1);
       if (startPage > 2) {
@@ -114,12 +112,10 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
       }
     }
 
-    // Add visible pages
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i);
     }
 
-    // Add last page if not visible
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
         pages.push('...');
@@ -185,14 +181,12 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Header with search and filters */}
       <div className="p-6 bg-gray-50 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
             Products ({filteredProducts.length})
           </h2>
           <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
-            {/* ✅ REPLACED: Complex search input with simple reusable English SearchBar */}
             <EnglishSearchBar
               value={searchQuery}
               onChange={setSearchQuery}
@@ -200,7 +194,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
               width="250px"
             />
             
-            {/* Store filter */}
             <select
               value={storeFilter}
               onChange={(e) => setStoreFilter(e.target.value as 'ALL' | Store)}
@@ -212,7 +205,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
               <option value={Store.SABORO}>SABORO</option>
             </select>
             
-            {/* Clear filters */}
             {(searchQuery || storeFilter !== 'ALL') && (
               <button
                 onClick={() => {
@@ -235,7 +227,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -278,7 +269,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
                       <div>
                         <div className="text-sm font-medium text-gray-900">{product.productName}</div>
                         <div className="text-sm text-gray-500">ID: {product.productId}</div>
-                        {/* Show description on mobile/tablet */}
                         <div className="lg:hidden">
                           {product.description && (
                             <div className="text-xs text-gray-400 mt-1 truncate max-w-xs">{product.description}</div>
@@ -297,7 +287,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">{getStoreBadge(product.storeId)}</td>
-                  {/* Description column - hidden on mobile/tablet */}
                   <td className="px-6 py-4 hidden lg:table-cell">
                     {product.description ? (
                       <div className="text-sm text-gray-900 max-w-xs truncate" title={product.description}>
@@ -330,7 +319,6 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({ products, onEdit, 
         </table>
       </div>
 
-      {/* Enhanced pagination */}
       {renderPagination()}
     </div>
   );

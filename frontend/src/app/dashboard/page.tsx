@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import HamburgerNavigation from '@/components/HamburgerNavigation';
 
+
 interface DashboardCard {
   id: string;
   title: string;
@@ -12,13 +13,15 @@ interface DashboardCard {
   color: string;
 }
 
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState('');
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const router = useRouter();
 
-  // Dashboard cards data
+
+  // ✅ UPDATED: Dashboard cards sequence
   const dashboardCards: DashboardCard[] = [
     {
       id: 'inventory',
@@ -29,28 +32,12 @@ export default function Dashboard() {
       color: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
     },
     {
-      id: 'users',
-      title: 'Manage',
-      subtitle: 'Users',
-      icon: '👥',
-      route: '/manage-users',
-      color: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'
-    },
-    {
       id: 'verification',
       title: 'Daily Entry',
       subtitle: 'Verification',
       icon: '✅',
       route: '/data-verification',
       color: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)'
-    },
-    {
-      id: 'products',
-      title: 'Manage',
-      subtitle: 'Products',
-      icon: '🥛',
-      route: '/products',
-      color: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)'
     },
     {
       id: 'notifications',
@@ -67,8 +54,33 @@ export default function Dashboard() {
       icon: '📄',
       route: '/billing',
       color: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)'
+    },
+    {
+      id: 'users',
+      title: 'Manage',
+      subtitle: 'Worker',
+      icon: '👥',
+      route: '/manage-users',
+      color: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'
+    },
+    {
+      id: 'customer',
+      title: 'Manage',
+      subtitle: 'Customer',
+      icon: '👤',
+      route: '/customer',
+      color: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)'
+    },
+    {
+      id: 'products',
+      title: 'Manage',
+      subtitle: 'Products',
+      icon: '🥛',
+      route: '/products',
+      color: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)'
     }
   ];
+
 
   // Update time every second
   useEffect(() => {
@@ -85,17 +97,21 @@ export default function Dashboard() {
         year: 'numeric',
         timeZone: 'Asia/Kolkata'
       });
-      setCurrentTime(`${timeString} ${dateString}`);
+    setCurrentTime(`${dateString} | ${timeString}`);
     };
+
 
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
+
+
     
     if (!token) {
       router.push('/');
@@ -107,15 +123,19 @@ export default function Dashboard() {
     }
   }, [router]);
 
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/');
   };
 
+
   const handleCardClick = (route: string) => {
     router.push(route);
   };
+
+
 
   if (!user) {
     return (
@@ -130,6 +150,7 @@ export default function Dashboard() {
       </div>
     );
   }
+
 
   return (
     <>
@@ -153,13 +174,14 @@ export default function Dashboard() {
           zIndex: 0,
         }} />
 
+
         {/* Header - REDUCED z-index so menu can overlay it */}
         <header style={{
           background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
           padding: '20px 40px',
           boxShadow: '0 8px 32px rgba(30, 64, 175, 0.3)',
           position: 'relative',
-          zIndex: 10, // ✅ REDUCED from z-1 to z-10 (menu is z-50)
+          zIndex: 10,
         }}>
           <div style={{
             display: 'flex',
@@ -173,7 +195,7 @@ export default function Dashboard() {
               display: 'flex', 
               alignItems: 'center', 
               gap: '20px',
-              paddingLeft: '70px' // ✅ ADD padding to avoid hamburger button
+              paddingLeft: '70px'
             }}>
               {/* Logo */}
               <h1 style={{
@@ -184,9 +206,10 @@ export default function Dashboard() {
                 letterSpacing: '-0.02em',
                 textShadow: '0 2px 8px rgba(0,0,0,0.3)'
               }}>
-                VITRAN
+                Vitaran
               </h1>
             </div>
+
 
             {/* Current Time */}
             <div style={{
@@ -201,13 +224,14 @@ export default function Dashboard() {
           </div>
         </header>
 
+
         {/* Main Content */}
         <main style={{
           padding: '40px',
           maxWidth: '1400px',
           margin: '0 auto',
           position: 'relative',
-          zIndex: 10, // ✅ REDUCED z-index so menu overlays
+          zIndex: 10,
         }}>
           {/* Welcome Section */}
           <div style={{
@@ -230,7 +254,9 @@ export default function Dashboard() {
                 backgroundClip: 'text'
               }}>
                 Welcome back, {user.name || 'Admin'}!
+                
               </h2>
+                
               <p style={{
                 color: '#64748b',
                 fontSize: '1.1rem',
@@ -240,6 +266,7 @@ export default function Dashboard() {
                 Manage your milk distribution operations efficiently
               </p>
             </div>
+
 
             <button
               onClick={handleLogout}
@@ -271,11 +298,12 @@ export default function Dashboard() {
               </button>
           </div>
 
+
           {/* Dashboard Cards Grid - REDUCED CARD SIZE */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', // ✅ REDUCED from 300px to 250px
-            gap: '20px', // ✅ REDUCED gap from 24px to 20px
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '20px',
             marginTop: '40px'
           }}>
             {dashboardCards.map((card, index) => (
@@ -286,14 +314,14 @@ export default function Dashboard() {
                 onMouseLeave={() => setHoveredCard(null)}
                 style={{
                   background: 'white',
-                  borderRadius: '16px', // ✅ REDUCED from 20px to 16px
-                  padding: '24px', // ✅ REDUCED from 32px to 24px
+                  borderRadius: '16px',
+                  padding: '24px',
                   boxShadow: hoveredCard === card.id 
-                    ? '0 16px 32px rgba(59, 130, 246, 0.15)' // ✅ REDUCED shadow intensity
-                    : '0 6px 20px rgba(0, 0, 0, 0.06)', // ✅ REDUCED shadow intensity
+                    ? '0 16px 32px rgba(59, 130, 246, 0.15)'
+                    : '0 6px 20px rgba(0, 0, 0, 0.06)',
                   cursor: 'pointer',
                   transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: hoveredCard === card.id ? 'translateY(-6px) scale(1.015)' : 'translateY(0) scale(1)', // ✅ REDUCED hover transform
+                  transform: hoveredCard === card.id ? 'translateY(-6px) scale(1.015)' : 'translateY(0) scale(1)',
                   border: hoveredCard === card.id ? '2px solid rgba(59, 130, 246, 0.2)' : '2px solid transparent',
                   position: 'relative',
                   overflow: 'hidden',
@@ -306,30 +334,32 @@ export default function Dashboard() {
                   position: 'absolute',
                   top: 0,
                   right: 0,
-                  width: '80px', // ✅ REDUCED from 100px to 80px
-                  height: '80px', // ✅ REDUCED from 100px to 80px
+                  width: '80px',
+                  height: '80px',
                   background: card.color,
                   borderRadius: '50%',
-                  transform: 'translate(35px, -35px)', // ✅ ADJUSTED positioning
+                  transform: 'translate(35px, -35px)',
                   opacity: hoveredCard === card.id ? 0.1 : 0.05,
                   transition: 'opacity 0.3s ease',
                 }} />
+
 
                 {/* Card Content */}
                 <div style={{ position: 'relative', zIndex: 2 }}>
                   {/* Icon - REDUCED SIZE */}
                   <div style={{
-                    fontSize: '2.5rem', // ✅ REDUCED from 3rem to 2.5rem
-                    marginBottom: '12px', // ✅ REDUCED from 16px to 12px
+                    fontSize: '2.5rem',
+                    marginBottom: '12px',
                     transform: hoveredCard === card.id ? 'scale(1.1)' : 'scale(1)',
                     transition: 'transform 0.3s ease',
                   }}>
                     {card.icon}
                   </div>
 
+
                   {/* Title - REDUCED SIZE */}
                   <h3 style={{
-                    fontSize: '1.3rem', // ✅ REDUCED from 1.5rem to 1.3rem
+                    fontSize: '1.3rem',
                     fontWeight: '700',
                     color: '#1e293b',
                     margin: '0 0 4px 0',
@@ -338,9 +368,10 @@ export default function Dashboard() {
                     {card.title}
                   </h3>
 
+
                   {/* Subtitle - REDUCED SIZE */}
                   <p style={{
-                    fontSize: '1rem', // ✅ REDUCED from 1.125rem to 1rem
+                    fontSize: '1rem',
                     color: '#64748b',
                     margin: 0,
                     fontWeight: '500',
@@ -348,11 +379,12 @@ export default function Dashboard() {
                     {card.subtitle}
                   </p>
 
+
                   {/* Hover Arrow */}
                   <div style={{
-                    marginTop: '12px', // ✅ REDUCED from 16px to 12px
+                    marginTop: '12px',
                     color: '#3b82f6',
-                    fontSize: '1.125rem', // ✅ REDUCED from 1.25rem to 1.125rem
+                    fontSize: '1.125rem',
                     opacity: hoveredCard === card.id ? 1 : 0,
                     transform: hoveredCard === card.id ? 'translateX(4px)' : 'translateX(0)',
                     transition: 'all 0.3s ease',
@@ -364,6 +396,7 @@ export default function Dashboard() {
             ))}
           </div>
         </main>
+
 
         {/* Add keyframes for animations */}
         <style jsx>{`

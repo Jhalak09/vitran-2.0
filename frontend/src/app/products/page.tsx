@@ -111,8 +111,18 @@ Product Management            </h1>
             </div>
             {viewMode === 'list' && (
               <button onClick={handleCreateNew}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-colors duration-200">
-                Add New Product
+style={{
+            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '12px',
+            fontSize: '1rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(59, 130, 246, 0.3)',
+            transition: 'all 0.3s ease',
+          }}>                + Add Product
               </button>
             )}
             {(viewMode === 'create' || viewMode === 'edit') && (

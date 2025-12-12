@@ -113,7 +113,7 @@ export default function LoginPage() {
         />
       </div>
 
-      {/* Header with Hamburger and Centered VITRAN */}
+      {/* Header with Hamburger and Centered Vitaran */}
       <div style={{ 
         position: "fixed", 
         top: 0, 
@@ -128,7 +128,7 @@ export default function LoginPage() {
         {/* Left - Hamburger Menu */}
        
         
-        {/* Center - VITRAN Brand */}
+        {/* Center - Vitaran Brand */}
         <div style={{ 
           position: "absolute",
           top: '5px',
@@ -146,7 +146,7 @@ export default function LoginPage() {
               textShadow: "0 4px 8px rgba(0, 0, 0, 0.3)",
             }}
           >
-            VITRAN
+            Vitaran
           </h1>
           <p
             style={{

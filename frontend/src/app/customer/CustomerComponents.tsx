@@ -67,15 +67,15 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess,
       });
     }
   }, [customer, isEdit]);
-
+  
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
-    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!formData.address1.trim()) newErrors.address1 = 'Address is required';
-    if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Phone number is required';
-    if (!formData.city.trim()) newErrors.city = 'City is required';
-    if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
+   if (!(formData.firstName || '').trim()) newErrors.firstName = 'First name is required';
+if (!(formData.lastName || '').trim()) newErrors.lastName = 'Last name is required';
+if (!(formData.address1 || '').trim()) newErrors.address1 = 'Address is required';
+if (!(formData.phoneNumber || '').trim()) newErrors.phoneNumber = 'Phone number is required';
+if (!(formData.city || '').trim()) newErrors.city = 'City is required';
+    if (!(formData.pincode|| '').trim()) newErrors.pincode = 'Pincode is required';
     
     const phoneRegex = /^[+]?[1-9]?[0-9]{7,15}$/;
     if (formData.phoneNumber && !phoneRegex.test(formData.phoneNumber)) {
@@ -96,7 +96,10 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess,
     try {
       let response;
       if (isEdit && customer) {
-        response = await customerApi.updateCustomer(customer.customerId, formData);
+        const payload = Object.fromEntries(
+          Object.entries(formData).filter(([_, v]) => v !== '' && v !== null)
+        );
+        response = await customerApi.updateCustomer(customer.customerId, payload);
       } else {
         response = await customerApi.createCustomer(formData);
       }
